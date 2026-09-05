@@ -9,14 +9,28 @@ import { MemoryBookView } from './components/patient/MemoryBookView';
 import { AIAssistantView } from './components/patient/AIAssistantView';
 import { RemindersView } from './components/patient/RemindersView';
 import { CaregiverDashboard } from './components/caregiver/CaregiverDashboard';
-import { PhoneCall, Volume2, ShieldCheck } from 'lucide-react';
+import { AuthLandingView } from './components/auth/AuthLandingView';
+import { PhoneCall, Volume2, ShieldCheck, HeartHandshake } from 'lucide-react';
 
 function AppContent() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const { fontSize, speakText } = useAccessibility();
   const [currentView, setCurrentView] = useState<string>('dashboard');
 
   const renderView = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center space-y-4 py-16">
+          <div className="w-14 h-14 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-700 font-extrabold text-xl">Loading your MindCare space...</p>
+        </div>
+      );
+    }
+
+    if (!user) {
+      return <AuthLandingView />;
+    }
+
     if (user?.role === 'caregiver') {
       return <CaregiverDashboard />;
     }
@@ -63,9 +77,11 @@ function AppContent() {
           className="fixed bottom-4 right-4 z-40 bg-white/95 backdrop-blur-md border border-slate-300/80 p-3 rounded-2xl shadow-xl flex items-center gap-3"
         >
           <button
-            onClick={() =>
-              speakText('If you need help or feel uncertain, Sarah your daughter is just a phone call away.')
-            }
+            onClick={() => {
+              const contactName = user?.emergencyContact?.name || 'your caregiver or family member';
+              const contactPhone = user?.emergencyContact?.phone ? ` at ${user.emergencyContact.phone}` : '';
+              speakText(`If you need help or feel uncertain, ${contactName} is just a phone call away${contactPhone}.`);
+            }}
             className="flex items-center gap-2 text-xs sm:text-sm font-extrabold text-teal-900 bg-teal-50 hover:bg-teal-100 px-3.5 py-2 rounded-xl border border-teal-200 cursor-pointer"
           >
             <PhoneCall className="w-4 h-4 text-teal-700" />

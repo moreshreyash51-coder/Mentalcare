@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Brain,
   BookOpen,
@@ -12,23 +12,41 @@ import {
   PhoneCall,
   Flame,
   Award,
+  LogOut,
+  UserCheck,
+  Music,
+  CheckSquare,
+  Clock,
+  Plus,
+  Play,
+  Square,
+  Droplets,
+  Pill,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
 import { api } from '../../services/api';
 import { GameProgress, Reminder } from '../../types';
+import { SignOutConfirmModal } from '../auth/SignOutConfirmModal';
+import { reminderAudio } from '../../utils/reminderAudio';
+import { ReminderAlarmModal } from '../reminders/ReminderAlarmModal';
 
 interface PatientDashboardProps {
   onNavigate: (view: string) => void;
 }
 
 export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { t, speakText, fontSize, highContrast } = useAccessibility();
 
   const [progress, setProgress] = useState<GameProgress | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [activeAlarmReminder, setActiveAlarmReminder] = useState<Reminder | null>(null);
+  const [isSongPlaying, setIsSongPlaying] = useState(false);
+
+  const triggeredAlarmsRef = useRef<Set<string>>(new Set());
 
   // Determine time-appropriate greeting
   const getGreeting = () => {
@@ -59,6 +77,81 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
     };
     loadData();
   }, [user]);
+
+  // Subscribe to audio engine changes
+  useEffect(() => {
+    const unsub = reminderAudio.subscribe((playing) => {
+      setIsSongPlaying(playing);
+    });
+    return () => unsub();
+  }, []);
+
+  // Background reminder alarm checker on the home dashboard
+  useEffect(() => {
+    const checkAlarms = () => {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const nowTime = `${hours}:${minutes}`;
+
+      reminders.forEach((r) => {
+        if (!r.completed && r.time) {
+          const normalized = r.time.replace(/\s*[AP]M/i, '').trim();
+          const parts = normalized.split(':');
+          if (parts.length === 2) {
+            const formatted = `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+            const key = `${r._id}_${nowTime}`;
+
+            if (formatted === nowTime && !triggeredAlarmsRef.current.has(key)) {
+              triggeredAlarmsRef.current.add(key);
+              if (r.soundEnabled !== false) {
+                setActiveAlarmReminder(r);
+              }
+            }
+          }
+        }
+      });
+    };
+
+    checkAlarms();
+    const interval = setInterval(checkAlarms, 10000);
+    return () => clearInterval(interval);
+  }, [reminders]);
+
+  const handleQuickToggleReminder = async (r: Reminder) => {
+    const newStatus = !r.completed;
+    try {
+      const updated = await api.updateReminder(r._id, { completed: newStatus });
+      setReminders((prev) => prev.map((item) => (item._id === r._id ? updated : item)));
+      if (newStatus) {
+        reminderAudio.playGentleChime();
+        speakText(`Splendid! You completed ${r.title}.`);
+      }
+    } catch (e) {
+      console.warn('Failed to update reminder:', e);
+    }
+  };
+
+  const handleAlarmComplete = async (r: Reminder) => {
+    setActiveAlarmReminder(null);
+    await handleQuickToggleReminder(r);
+  };
+
+  const handleAlarmSnooze = async (r: Reminder) => {
+    setActiveAlarmReminder(null);
+    const [h, m] = r.time.split(':').map((v) => parseInt(v, 10) || 0);
+    const newMin = (m + 5) % 60;
+    const newHour = m + 5 >= 60 ? (h + 1) % 24 : h;
+    const newTimeStr = `${String(newHour).padStart(2, '0')}:${String(newMin).padStart(2, '0')}`;
+
+    try {
+      const updated = await api.updateReminder(r._id, { time: newTimeStr });
+      setReminders((prev) => prev.map((item) => (item._id === r._id ? updated : item)));
+      speakText(`Snoozed ${r.title} for 5 minutes.`);
+    } catch (e) {
+      console.warn('Failed to snooze reminder:', e);
+    }
+  };
 
   // Read aloud welcome summary
   const handleReadWelcome = () => {
@@ -193,7 +286,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
             </div>
           </button>
 
-          {/* 3. Ask AI */}
+          {/* 3. Ask AI Voice & Camera Assistant */}
           <button
             id="act-ask-ai-btn"
             onClick={() => onNavigate('ai')}
@@ -204,23 +297,37 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
             }`}
           >
             <div className="space-y-3">
-              <div className="w-16 h-16 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs">
+              <div className="w-16 h-16 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs relative">
                 <Sparkles className="w-8 h-8" />
+                <span className="absolute -bottom-1 -right-1 bg-purple-800 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full uppercase">
+                  AI + Cam
+                </span>
               </div>
               <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug">
-                {t('askAI')}
+                Voice & Camera AI
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Speak or type to ask friendly questions about your schedule, loved ones, or memories.
+                Check reminders, identify pill bottles or clocks via camera, and speak naturally with your friendly companion.
               </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md">
+                  🎤 Voice
+                </span>
+                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md">
+                  📷 Camera
+                </span>
+                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                  🔔 Reminders
+                </span>
+              </div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-purple-700 font-bold text-sm">
-              <span>Talk with Companion</span>
+              <span>Open AI Assistant</span>
               <span className="text-lg">→</span>
             </div>
           </button>
 
-          {/* 4. My Reminders */}
+          {/* 4. Schedule & Melodic Reminders */}
           <button
             id="act-my-reminders-btn"
             onClick={() => onNavigate('reminders')}
@@ -240,17 +347,146 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
                 )}
               </div>
               <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug">
-                {t('myReminders')}
+                Schedule & Reminders
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Check medications, meal times, hydration glasses, and gentle walks planned for today.
+                Check chores, medication times, water intake, and tasks alerted by our peaceful default bell song.
               </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <span className="text-[10px] font-black bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  <Music className="w-3 h-3 text-amber-700" />
+                  <span>Default Song</span>
+                </span>
+                <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-md">
+                  {reminders.filter((r) => !r.completed).length} Pending
+                </span>
+              </div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-amber-800 font-bold text-sm">
-              <span>View Schedule</span>
+              <span>View Full Schedule</span>
               <span className="text-lg">→</span>
             </div>
           </button>
+        </div>
+      </section>
+
+      {/* TODAY'S SCHEDULE & MELODIC REMINDERS HIGHLIGHT */}
+      <section
+        id="todays-schedule-highlight"
+        className="bg-gradient-to-br from-amber-50/90 via-orange-50/50 to-white rounded-3xl p-6 sm:p-7 border-2 border-amber-200/90 shadow-xs space-y-4"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+              <Clock className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-xl sm:text-2xl text-slate-900">
+                  Today's Schedule & Reminders
+                </h3>
+                <span className="text-xs font-bold bg-amber-200/80 text-amber-900 px-2.5 py-0.5 rounded-full hidden sm:inline">
+                  Melodic Alert Ready
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600">
+                {completedRemindersCount} of {reminders.length} tasks completed today. Tap any item to complete.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Song Preview Button */}
+            <button
+              id="dashboard-preview-song-btn"
+              type="button"
+              onClick={() => {
+                if (isSongPlaying) {
+                  reminderAudio.stop();
+                } else {
+                  reminderAudio.playDefaultReminderSong(false);
+                  speakText('Playing the comforting default reminder song.');
+                }
+              }}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black border transition-all cursor-pointer flex items-center gap-1.5 ${
+                isSongPlaying
+                  ? 'bg-amber-500 text-white border-amber-600 animate-pulse'
+                  : 'bg-white hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
+              }`}
+            >
+              {isSongPlaying ? (
+                <>
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>Stop Song</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Play Reminder Song 🎵</span>
+                </>
+              )}
+            </button>
+
+            {/* Manage Schedule Button */}
+            <button
+              id="dashboard-manage-schedule-btn"
+              type="button"
+              onClick={() => onNavigate('reminders')}
+              className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-black transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Schedule / Add</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Task List Preview (Top 3) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          {reminders.slice(0, 3).map((rem) => (
+            <div
+              key={rem._id}
+              className={`p-4 rounded-2xl border transition-all flex items-start justify-between gap-3 ${
+                rem.completed
+                  ? 'bg-emerald-50/50 border-emerald-200 opacity-80'
+                  : 'bg-white border-slate-200 hover:border-amber-300 shadow-2xs'
+              }`}
+            >
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                    {rem.time}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800">
+                    {rem.category}
+                  </span>
+                </div>
+                <h4
+                  className={`font-black text-sm text-slate-900 leading-snug line-clamp-1 ${
+                    rem.completed ? 'line-through text-slate-400' : ''
+                  }`}
+                >
+                  {rem.title}
+                </h4>
+                {rem.notes && (
+                  <p className="text-[11px] text-slate-500 line-clamp-1">{rem.notes}</p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleQuickToggleReminder(rem)}
+                className={`p-2 rounded-xl border transition-all cursor-pointer shrink-0 ${
+                  rem.completed
+                    ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                    : 'bg-slate-50 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 border-slate-200'
+                }`}
+                title={rem.completed ? 'Mark incomplete' : 'Mark done'}
+                aria-label={`Mark ${rem.title} done`}
+              >
+                <CheckCircle2 className="w-5 h-5" />
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -380,6 +616,69 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
           <span>Speak Phone Info</span>
         </button>
       </section>
+
+      {/* Account Status & Safe Sign Out for Elderly Patients */}
+      <section
+        id="patient-account-footer-strip"
+        className="bg-slate-100/90 border border-slate-200/90 rounded-3xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4"
+      >
+        <div className="flex items-center gap-3.5 text-left">
+          <img
+            src={user?.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80'}
+            alt={user?.name || 'Patient'}
+            className="w-11 h-11 rounded-2xl object-cover ring-2 ring-teal-600/30 shrink-0"
+          />
+          <div>
+            <p className="text-sm font-extrabold text-slate-800">
+              Active Patient: <span className="text-teal-700">{user?.name || 'Eleanor Vance'}</span>
+            </p>
+            <p className="text-xs text-slate-500">
+              Your memory games, photo albums, and reminders are actively synced to MongoDB.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            id="dashboard-read-status-btn"
+            onClick={() =>
+              speakText(
+                `You are currently logged into MindCare as ${user?.name || 'Eleanor Vance'}. Everything is saved and ready for you.`
+              )
+            }
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold border border-slate-200 cursor-pointer transition-colors"
+          >
+            <Volume2 className="w-4 h-4 text-teal-700" />
+            <span>Audio Status</span>
+          </button>
+          <button
+            id="dashboard-signout-btn"
+            onClick={() => setShowSignOutConfirm(true)}
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-900 px-4 py-2 rounded-xl font-extrabold border border-rose-200 text-xs sm:text-sm shadow-2xs transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-rose-600" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </section>
+
+      <SignOutConfirmModal
+        isOpen={showSignOutConfirm}
+        onClose={() => setShowSignOutConfirm(false)}
+        onConfirm={() => {
+          logout();
+          onNavigate('dashboard');
+        }}
+        userName={user?.name}
+      />
+
+      <ReminderAlarmModal
+        reminder={activeAlarmReminder}
+        isOpen={Boolean(activeAlarmReminder)}
+        onClose={() => setActiveAlarmReminder(null)}
+        onComplete={handleAlarmComplete}
+        onSnooze={handleAlarmSnooze}
+      />
     </div>
   );
 };

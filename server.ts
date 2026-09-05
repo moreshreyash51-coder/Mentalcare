@@ -11,6 +11,7 @@ import { gamesRouter } from './server/routes/games.js';
 import { remindersRouter } from './server/routes/reminders.js';
 import { aiRouter } from './server/routes/ai.js';
 import { notificationsRouter } from './server/routes/notifications.js';
+import { initDatabase, getDatabaseStatus } from './server/db/schema.js';
 
 dotenv.config();
 
@@ -18,11 +19,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  // Initialize Database (MongoDB with resilient in-memory fallback)
+  await initDatabase();
+
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.json({ limit: '15mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
   // API Health Check
   app.get('/api/health', (_req, res) => {
@@ -32,6 +36,16 @@ async function startServer() {
       timestamp: new Date().toISOString(),
       aiConfigured: Boolean(process.env.GEMINI_API_KEY),
     });
+  });
+
+  // MongoDB Status & Diagnostics
+  app.get('/api/db/status', async (_req, res) => {
+    try {
+      const status = await getDatabaseStatus();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to retrieve database status', details: err.message });
+    }
   });
 
   // Register API Routes

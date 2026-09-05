@@ -19,7 +19,7 @@ remindersRouter.get('/:patientId', async (req: Request, res: Response): Promise<
 // POST /api/reminders
 remindersRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { patientId, title, time, category, recurrence, notes } = req.body;
+    const { patientId, title, time, category, recurrence, notes, description, date, priority, soundEnabled, soundTune } = req.body;
 
     if (!patientId || !title || !time) {
       res.status(400).json({ error: 'patientId, title, and time are required.' });
@@ -30,10 +30,15 @@ remindersRouter.post('/', async (req: Request, res: Response): Promise<void> => 
       patientId,
       title,
       time,
-      category: category || 'activity',
+      category: category || 'task',
       completed: false,
       recurrence: recurrence || 'Daily',
-      notes: notes || '',
+      notes: notes || description || '',
+      description: description || notes || '',
+      date: date || '',
+      priority: priority || 'normal',
+      soundEnabled: soundEnabled !== undefined ? Boolean(soundEnabled) : true,
+      soundTune: soundTune || 'soothing-song',
       createdAt: new Date().toISOString(),
     });
 
@@ -47,7 +52,7 @@ remindersRouter.post('/', async (req: Request, res: Response): Promise<void> => 
 remindersRouter.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { completed, title, time, category, recurrence, notes } = req.body;
+    const { completed, title, time, category, recurrence, notes, description, date, priority, soundEnabled, soundTune } = req.body;
 
     const existing = await db.reminders.findById(id);
     if (!existing) {
@@ -62,6 +67,11 @@ remindersRouter.put('/:id', async (req: Request, res: Response): Promise<void> =
       ...(category ? { category } : {}),
       ...(recurrence ? { recurrence } : {}),
       ...(notes !== undefined ? { notes } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(date !== undefined ? { date } : {}),
+      ...(priority ? { priority } : {}),
+      ...(soundEnabled !== undefined ? { soundEnabled: Boolean(soundEnabled) } : {}),
+      ...(soundTune ? { soundTune } : {}),
     });
 
     if (completed && !existing.completed) {

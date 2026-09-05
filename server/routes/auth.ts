@@ -46,10 +46,123 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
       updatedAt: new Date().toISOString(),
     });
 
-    // If new user is a patient, set their patientId to their own _id
+    // If new user is a patient, set their patientId to their own _id and seed starter user data
     if (newUser.role === 'patient') {
       await db.users.findByIdAndUpdate(newUser._id, { patientId: newUser._id });
       newUser.patientId = newUser._id;
+
+      const now = Date.now();
+
+      // 1. Starter memories
+      await Promise.all([
+        db.memories.create({
+          patientId: newUser._id,
+          title: 'Family Garden Afternoon',
+          personName: 'Family & Loved Ones',
+          relationship: 'Family',
+          description: 'A warm and sunny afternoon gathered with loved ones on the back patio, surrounded by fresh flowers and laughter.',
+          photoUrl: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?w=600&auto=format&fit=crop&q=80',
+          tags: ['Family', 'Garden', 'Spring'],
+          dateEra: 'Recent Cherished Memory',
+          createdAt: new Date(now - 86400000).toISOString(),
+          updatedAt: new Date(now - 86400000).toISOString(),
+        }),
+        db.memories.create({
+          patientId: newUser._id,
+          title: 'Sunday Morning Tea & Music',
+          personName: 'Home & Comfort',
+          relationship: 'Cherished Moment',
+          description: 'Relaxing by the front window listening to favorite classic records while enjoying a warm cup of herbal tea.',
+          photoUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
+          tags: ['Music', 'Tea', 'Comfort'],
+          dateEra: 'Favorite Routine',
+          createdAt: new Date(now - 2 * 86400000).toISOString(),
+          updatedAt: new Date(now - 2 * 86400000).toISOString(),
+        }),
+        db.memories.create({
+          patientId: newUser._id,
+          title: 'Peaceful Ocean Walk',
+          personName: 'Nature',
+          relationship: 'Scenic Memory',
+          description: 'Walking gently along the coast, feeling the fresh ocean breeze, hearing waves lap against the shore, and watching gulls.',
+          photoUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
+          tags: ['Nature', 'Beach', 'Calm'],
+          dateEra: 'Summer Memories',
+          createdAt: new Date(now - 3 * 86400000).toISOString(),
+          updatedAt: new Date(now - 3 * 86400000).toISOString(),
+        }),
+      ]);
+
+      // 2. Starter daily reminders
+      await Promise.all([
+        db.reminders.create({
+          patientId: newUser._id,
+          title: 'Morning Water & Vitamin',
+          time: '08:30 AM',
+          category: 'medication',
+          completed: false,
+          recurrence: 'Daily',
+          notes: 'Take with a full glass of lukewarm water after breakfast.',
+          createdAt: new Date().toISOString(),
+        }),
+        db.reminders.create({
+          patientId: newUser._id,
+          title: 'Gentle Afternoon Stroll or Stretch',
+          time: '02:00 PM',
+          category: 'activity',
+          completed: false,
+          recurrence: 'Daily',
+          notes: 'Enjoy 15 minutes of light movement or sit in the fresh air.',
+          createdAt: new Date().toISOString(),
+        }),
+        db.reminders.create({
+          patientId: newUser._id,
+          title: 'Evening Memory Game & Relaxation',
+          time: '07:30 PM',
+          category: 'activity',
+          completed: false,
+          recurrence: 'Daily',
+          notes: 'Play a card match game to keep the mind sharp and relaxed.',
+          createdAt: new Date().toISOString(),
+        }),
+      ]);
+
+      // 3. Starter AI conversation
+      await db.conversations.create({
+        patientId: newUser._id,
+        messages: [
+          {
+            id: 'msg_init_' + Date.now(),
+            role: 'assistant',
+            content: `Hello ${newUser.name}! I am your MindCare memory companion. I am here to help you remember your favorite memories, people, and daily schedule. What would you like to talk about today?`,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        lastInteraction: new Date().toISOString(),
+      });
+
+      // 4. Starter notification
+      await db.notifications.create({
+        patientId: newUser._id,
+        title: 'Welcome to MindCare!',
+        message: `Welcome ${newUser.name}. Your personal memory book, cognitive brain games, and daily reminders are ready and saved in your secure database.`,
+        type: 'note',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+
+      // 5. Initial baseline game score
+      await db.gameResults.create({
+        patientId: newUser._id,
+        gameType: 'memory-match',
+        difficulty: 'easy',
+        score: 92,
+        accuracy: 90,
+        responseTimeMs: 3500,
+        attempts: 5,
+        mistakes: 1,
+        completedAt: new Date(now - 3600000).toISOString(),
+      });
     }
 
     const token = jwt.sign(

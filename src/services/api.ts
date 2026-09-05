@@ -1,4 +1,4 @@
-import { GameProgress, GameResult, Memory, Reminder, User, ChatMessage, AppNotification } from '../types';
+import { GameProgress, GameResult, Memory, Reminder, User, ChatMessage, AppNotification, DatabaseStatus, CognitivePerformanceReport } from '../types';
 
 const BASE_URL = '/api';
 
@@ -171,16 +171,23 @@ export const api = {
     if (!res.ok) throw new Error('Failed to remove reminder');
   },
 
-  // AI Memory Assistant
+  // AI Memory & Vision Assistant (Voice, Camera, and Text)
   async sendAIChat(
     patientId: string,
     message: string,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
-  ): Promise<{ reply: string; timestamp: string }> {
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    imageBase64?: string,
+    mimeType?: string
+  ): Promise<{
+    reply: string;
+    timestamp: string;
+    actionTaken?: 'reminder_completed' | 'reminder_created' | 'camera_analyzed';
+    affectedReminder?: Reminder;
+  }> {
     const res = await fetch(`${BASE_URL}/ai/chat`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ patientId, message, conversationHistory }),
+      body: JSON.stringify({ patientId, message, conversationHistory, imageBase64, mimeType }),
     });
     if (!res.ok) throw new Error('AI Assistant temporary error');
     return res.json();
@@ -189,6 +196,23 @@ export const api = {
   async getAIHistory(patientId: string): Promise<ChatMessage[]> {
     const res = await fetch(`${BASE_URL}/ai/history/${patientId}`, { headers: getAuthHeaders() });
     if (!res.ok) return [];
+    return res.json();
+  },
+
+  async analyzePatientPerformance(patientId: string): Promise<CognitivePerformanceReport> {
+    const res = await fetch(`${BASE_URL}/ai/analyze-performance`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ patientId }),
+    });
+    if (!res.ok) throw new Error('Failed to analyze patient performance');
+    return res.json();
+  },
+
+  // Database Status (MongoDB / Engine status)
+  async getDatabaseStatus(): Promise<DatabaseStatus> {
+    const res = await fetch(`${BASE_URL}/db/status`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Failed to retrieve database status');
     return res.json();
   },
 

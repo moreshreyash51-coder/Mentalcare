@@ -46,11 +46,15 @@ export interface Reminder {
   patientId: string;
   title: string;
   time: string;
-  category: 'medication' | 'meal' | 'activity' | 'appointment' | 'hydration';
+  category: 'medication' | 'meal' | 'activity' | 'appointment' | 'hydration' | 'task' | 'routine';
   completed: boolean;
   recurrence: string;
   date?: string;
   notes?: string;
+  description?: string;
+  priority?: 'normal' | 'high' | 'urgent';
+  soundEnabled?: boolean;
+  soundTune?: string;
   createdAt: string;
 }
 
@@ -90,6 +94,23 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  imagePreview?: string;
+  actionTaken?: 'reminder_completed' | 'reminder_created' | 'camera_analyzed';
+  affectedReminder?: Reminder;
+}
+
+export interface DatabaseStatus {
+  isMongoConnected: boolean;
+  mongoConnectionError: string | null;
+  engine: string;
+  databaseName: string;
+  uriConfigured: boolean;
+  counts: {
+    users: number;
+    memories: number;
+    reminders: number;
+    gameResults: number;
+  };
 }
 
 export interface AppNotification {
@@ -100,5 +121,39 @@ export interface AppNotification {
   message: string;
   type: 'game_completed' | 'reminder_due' | 'difficulty_adapted' | 'note';
   read: boolean;
+  createdAt: string;
+}
+
+export interface CognitivePerformanceReport {
+  patientId: string;
+  patientName: string;
+  overallCognitiveIndex: number;
+  stabilityStatus: 'improving' | 'stable' | 'needs_attention';
+  retentionRate: number;
+  averageResponseTimeSec: number;
+  mistakeFrequency: number;
+  routineAdherencePercent: number;
+  totalSessionsPlayed: number;
+  cognitiveDomainBreakdown: {
+    visualMemory: number;
+    workingMemory: number;
+    executiveFunction: number;
+    processingSpeed: number;
+  };
+  strengths: string[];
+  areasToSupport: string[];
+  recommendations: string[];
+  summary: string;
+  generatedAt: string;
+}
+
+export interface CaregiverObservation {
+  id: string;
+  date: string;
+  mood: 'cheerful' | 'calm' | 'thoughtful' | 'restless' | 'fatigued';
+  sleepQuality: 'peaceful' | 'average' | 'interrupted';
+  waterIntakeGlasses: number;
+  notes: string;
+  recordedBy: string;
   createdAt: string;
 }

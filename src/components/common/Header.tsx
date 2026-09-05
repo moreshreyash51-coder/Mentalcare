@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { HeartHandshake, User, Users, Volume2, VolumeX, Eye, Globe, ChevronDown, Check, LogOut } from 'lucide-react';
+import { HeartHandshake, User, Users, Volume2, VolumeX, Eye, Globe, ChevronDown, Check, LogOut, Database, Lock, LogIn, UserPlus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAccessibility, FontSizeOption, LanguageOption } from '../../context/AccessibilityContext';
+import { AuthModal } from './AuthModal';
+import { SignOutConfirmModal } from '../auth/SignOutConfirmModal';
 
 interface HeaderProps {
   currentView: string;
@@ -9,7 +11,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onNavigate }) => {
-  const { user, switchDemoUser, logout } = useAuth();
+  const { user, logout } = useAuth();
   const {
     fontSize,
     setFontSize,
@@ -24,6 +26,8 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate }) => {
 
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [signOutModalOpen, setSignOutModalOpen] = useState(false);
 
   const languages: { code: LanguageOption; label: string; flag: string }[] = [
     { code: 'en', label: 'English', flag: '🇺🇸' },
@@ -55,50 +59,33 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate }) => {
             </div>
           </button>
 
-          {/* Center Role Badge & Mode Switcher */}
-          <div className="hidden md:flex items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200">
-            <button
-              id="switch-patient-btn"
-              onClick={() => {
-                switchDemoUser('patient');
-                onNavigate('dashboard');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                user?.role === 'patient'
-                  ? 'bg-teal-700 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <User className="w-4 h-4" />
-              <span>{t('patientDashboard')}</span>
-              {user?.role === 'patient' && (
-                <span className="bg-teal-800 text-teal-100 text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Active
-                </span>
+          {/* Center User Space Indicator */}
+          {user ? (
+            <div className="hidden md:flex items-center gap-2">
+              {user.role === 'patient' ? (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-teal-50 border border-teal-200 text-teal-900 text-sm font-bold shadow-2xs">
+                  <User className="w-4 h-4 text-teal-700" />
+                  <span>Senior & Patient Companion</span>
+                  <span className="bg-teal-700 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">
+                    Active Session
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-sm font-bold shadow-2xs">
+                  <Users className="w-4 h-4 text-indigo-700" />
+                  <span>Caregiver & Family Portal</span>
+                  <span className="bg-indigo-700 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">
+                    Active Session
+                  </span>
+                </div>
               )}
-            </button>
-
-            <button
-              id="switch-caregiver-btn"
-              onClick={() => {
-                switchDemoUser('caregiver');
-                onNavigate('dashboard');
-              }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                user?.role === 'caregiver'
-                  ? 'bg-indigo-700 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>{t('caregiverDashboard')}</span>
-              {user?.role === 'caregiver' && (
-                <span className="bg-indigo-800 text-indigo-100 text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Active
-                </span>
-              )}
-            </button>
-          </div>
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-teal-50 text-teal-900 border border-teal-200/80 rounded-2xl text-xs font-extrabold shadow-2xs">
+              <HeartHandshake className="w-4 h-4 text-teal-600" />
+              <span>Compassionate Care • Easy For Seniors</span>
+            </div>
+          )}
 
           {/* Right Action Tools & Accessibility Controls */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -204,36 +191,75 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate }) => {
               )}
             </div>
 
-            {/* User Profile Pill & Role Switch on Mobile */}
+            {/* User Profile Pill, Auth & Database Modal Trigger */}
             <div className="flex items-center gap-2 border-l border-slate-200 pl-2">
-              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-2.5 py-1.5 rounded-xl">
-                <img
-                  src={user?.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80'}
-                  alt={user?.name}
-                  className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-300"
-                />
-                <div className="hidden lg:block text-left">
-                  <p className="text-xs font-bold text-slate-800 leading-none">{user?.name}</p>
-                  <p className="text-[10px] font-medium text-slate-500 capitalize">{user?.role}</p>
-                </div>
-              </div>
+              {user ? (
+                <>
+                  <button
+                    id="header-auth-account-btn"
+                    onClick={() => setAuthModalOpen(true)}
+                    className="flex items-center gap-2 bg-slate-50 hover:bg-teal-50/80 border border-slate-200/80 hover:border-teal-300 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer text-left"
+                    title="Account, Authentication & MongoDB Database"
+                  >
+                    <img
+                      src={user?.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80'}
+                      alt={user?.name}
+                      className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-300"
+                    />
+                    <div className="hidden lg:block text-left">
+                      <p className="text-xs font-bold text-slate-800 leading-none">{user?.name}</p>
+                      <p className="text-[10px] font-medium text-slate-500 capitalize">{user?.role} • Auth/DB</p>
+                    </div>
+                  </button>
 
-              {/* Mobile Role Switch Button */}
-              <button
-                id="mobile-switch-role-btn"
-                onClick={() => {
-                  switchDemoUser(user?.role === 'patient' ? 'caregiver' : 'patient');
-                  onNavigate('dashboard');
-                }}
-                className="md:hidden p-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200"
-                title="Switch Role"
-              >
-                {user?.role === 'patient' ? 'Caregiver' : 'Patient'}
-              </button>
+                  {/* Prominent Easy-to-use Sign Out Button */}
+                  <button
+                    id="header-signout-btn"
+                    onClick={() => setSignOutModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-900 border border-rose-200 text-xs sm:text-sm font-extrabold cursor-pointer transition-all shadow-2xs"
+                    title="Sign Out of MindCare"
+                    aria-label="Sign Out of MindCare"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-600" />
+                    <span className="hidden sm:inline">Sign Out</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    id="header-signin-btn"
+                    onClick={() => setAuthModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs sm:text-sm font-extrabold cursor-pointer transition-all shadow-2xs"
+                  >
+                    <LogIn className="w-4 h-4 text-teal-700" />
+                    <span>Sign In</span>
+                  </button>
+
+                  <button
+                    id="header-register-btn"
+                    onClick={() => setAuthModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-extrabold cursor-pointer transition-all shadow-2xs"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Create Account</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      <SignOutConfirmModal
+        isOpen={signOutModalOpen}
+        onClose={() => setSignOutModalOpen(false)}
+        onConfirm={() => {
+          logout();
+          onNavigate('dashboard');
+        }}
+        userName={user?.name}
+      />
     </header>
   );
 };

@@ -1,16 +1,16 @@
 import express, { Request, Response } from 'express';
 import { db } from '../db/schema.js';
-import { askMemoryAssistant } from '../services/aiService.js';
+import { askMemoryAssistant, analyzePatientPerformance } from '../services/aiService.js';
 
 export const aiRouter = express.Router();
 
-// POST /api/ai/chat
+// POST /api/ai/chat (Supports voice, text, and camera vision)
 aiRouter.post('/chat', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { patientId, message, conversationHistory } = req.body;
+    const { patientId, message, imageBase64, mimeType, conversationHistory } = req.body;
 
-    if (!patientId || !message) {
-      res.status(400).json({ error: 'patientId and message are required.' });
+    if (!patientId || (!message && !imageBase64)) {
+      res.status(400).json({ error: 'patientId and either message or imageBase64 are required.' });
       return;
     }
 
@@ -24,11 +24,15 @@ aiRouter.post('/chat', async (req: Request, res: Response): Promise<void> => {
     const memories = await db.memories.find({ patientId });
     const reminders = await db.reminders.find({ patientId });
 
-    const reply = await askMemoryAssistant({
+    const effectiveMessage = (message || '').trim() || (imageBase64 ? 'Please look at what I am showing you in my camera.' : 'Hello');
+
+    const result = await askMemoryAssistant({
       patient,
       memories,
       reminders,
-      userMessage: message,
+      userMessage: effectiveMessage,
+      imageBase64,
+      mimeType,
       conversationHistory: conversationHistory || [],
     });
 
@@ -37,13 +41,13 @@ aiRouter.post('/chat', async (req: Request, res: Response): Promise<void> => {
     const userMsgObj = {
       id: 'msg_u_' + Date.now(),
       role: 'user' as const,
-      content: message,
+      content: effectiveMessage + (imageBase64 ? ' [Photo Attached]' : ''),
       timestamp: new Date().toISOString(),
     };
     const assistantMsgObj = {
       id: 'msg_a_' + Date.now(),
       role: 'assistant' as const,
-      content: reply,
+      content: result.reply,
       timestamp: new Date().toISOString(),
     };
 
@@ -62,7 +66,9 @@ aiRouter.post('/chat', async (req: Request, res: Response): Promise<void> => {
     }
 
     res.json({
-      reply,
+      reply: result.reply,
+      actionTaken: result.actionTaken,
+      affectedReminder: result.affectedReminder,
       timestamp: new Date().toISOString(),
       conversationId: conversation._id,
     });
@@ -70,7 +76,7 @@ aiRouter.post('/chat', async (req: Request, res: Response): Promise<void> => {
     console.error('AI chat route error:', err);
     res.status(500).json({
       error: 'AI assistant encountered an issue',
-      reply: 'I am here with you. Please give me just a moment or ask me about your family or today\'s reminders.',
+      reply: 'I am right here with you. Please ask me about your family or today\'s reminders, or show an item to your camera.',
     });
   }
 });
@@ -83,5 +89,37 @@ aiRouter.get('/history/:patientId', async (req: Request, res: Response): Promise
     res.json(conversation ? conversation.messages : []);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to retrieve conversation history' });
+  }
+});
+
+// POST /api/ai/analyze-performance
+aiRouter.post('/analyze-performance', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { patientId } = req.body;
+    if (!patientId) {
+      res.status(400).json({ error: 'patientId is required.' });
+      return;
+    }
+
+    const patient = await db.users.findById(patientId);
+    if (!patient) {
+      res.status(404).json({ error: 'Patient not found' });
+      return;
+    }
+
+    const gameResults = await db.gameResults.find({ patientId });
+    const reminders = await db.reminders.find({ patientId });
+    const memories = await db.memories.find({ patientId });
+
+    const sortedResults = [...gameResults].sort(
+      (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+    );
+
+    const report = await analyzePatientPerformance(patient, sortedResults, reminders, memories);
+
+    res.json(report);
+  } catch (err: any) {
+    console.error('Error analyzing patient performance:', err);
+    res.status(500).json({ error: 'Failed to generate cognitive performance analysis' });
   }
 });

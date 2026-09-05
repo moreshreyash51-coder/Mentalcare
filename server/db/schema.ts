@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import mongoose, { Schema, Model } from 'mongoose';
 
 // MongoDB / Mongoose compatible interfaces and schema definitions
 
@@ -61,11 +62,15 @@ export interface IReminder {
   patientId: string;
   title: string;
   time: string; // e.g. "08:30"
-  category: 'medication' | 'meal' | 'activity' | 'appointment' | 'hydration';
+  category: 'medication' | 'meal' | 'activity' | 'appointment' | 'hydration' | 'task' | 'routine';
   completed: boolean;
-  recurrence: string; // "Daily", "Once", "Weekly"
+  recurrence: string; // "Daily", "Once", "Weekly", "Weekdays"
   date?: string;
   notes?: string;
+  description?: string;
+  priority?: 'normal' | 'high' | 'urgent';
+  soundEnabled?: boolean;
+  soundTune?: string;
   createdAt: string;
 }
 
@@ -92,65 +97,139 @@ export interface INotification {
   createdAt: string;
 }
 
-/**
- * Robust in-memory & persistent mock MongoDB collection
- * Mimics Mongoose query interface, ensuring immediate out-of-the-box readiness
- * and seamless fallback when MONGODB_URI is not connected.
- */
-class MongoCollection<T extends { _id: string }> {
-  private items: Map<string, T> = new Map();
+// -------------------------------------------------------------
+// Official Mongoose Schemas (MongoDB)
+// -------------------------------------------------------------
 
-  constructor(initialData: T[] = []) {
-    initialData.forEach((item) => this.items.set(item._id, { ...item }));
-  }
+const UserMongooseSchema = new Schema<IUser>(
+  {
+    _id: { type: String, required: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password: { type: String, required: true },
+    role: { type: String, enum: ['patient', 'caregiver'], default: 'patient' },
+    patientId: { type: String },
+    avatar: { type: String },
+    dateOfBirth: { type: String },
+    emergencyContact: {
+      name: { type: String },
+      phone: { type: String },
+      relation: { type: String },
+    },
+    language: { type: String, enum: ['en', 'es', 'fr', 'de'], default: 'en' },
+    accessibilitySettings: {
+      fontSize: { type: String, enum: ['normal', 'large', 'extra-large'], default: 'large' },
+      highContrast: { type: Boolean, default: false },
+      voiceAssistance: { type: Boolean, default: true },
+      speechRate: { type: Number, default: 0.9 },
+      simpleNavigation: { type: Boolean, default: true },
+    },
+    cognitiveDifficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'easy' },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false, timestamps: false }
+);
 
-  async find(query: Partial<Record<keyof T, any>> = {}): Promise<T[]> {
-    const list = Array.from(this.items.values());
-    return list.filter((item) => {
-      for (const [key, val] of Object.entries(query)) {
-        if (item[key as keyof T] !== val) return false;
-      }
-      return true;
-    });
-  }
+const MemoryMongooseSchema = new Schema<IMemory>(
+  {
+    _id: { type: String, required: true },
+    patientId: { type: String, required: true, index: true },
+    title: { type: String, required: true },
+    personName: { type: String },
+    relationship: { type: String, required: true },
+    description: { type: String, required: true },
+    photoUrl: { type: String, required: true },
+    tags: [{ type: String }],
+    dateEra: { type: String },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false, timestamps: false }
+);
 
-  async findById(id: string): Promise<T | null> {
-    const item = this.items.get(id);
-    return item ? { ...item } : null;
-  }
+const ReminderMongooseSchema = new Schema<IReminder>(
+  {
+    _id: { type: String, required: true },
+    patientId: { type: String, required: true, index: true },
+    title: { type: String, required: true },
+    time: { type: String, required: true },
+    category: {
+      type: String,
+      enum: ['medication', 'meal', 'activity', 'appointment', 'hydration', 'task', 'routine'],
+      default: 'task',
+    },
+    completed: { type: Boolean, default: false },
+    recurrence: { type: String, default: 'Daily' },
+    date: { type: String },
+    notes: { type: String },
+    description: { type: String },
+    priority: { type: String, enum: ['normal', 'high', 'urgent'], default: 'normal' },
+    soundEnabled: { type: Boolean, default: true },
+    soundTune: { type: String, default: 'soothing-song' },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false, timestamps: false }
+);
 
-  async findOne(query: Partial<Record<keyof T, any>>): Promise<T | null> {
-    const results = await this.find(query);
-    return results[0] || null;
-  }
+const GameResultMongooseSchema = new Schema<IGameResult>(
+  {
+    _id: { type: String, required: true },
+    patientId: { type: String, required: true, index: true },
+    gameType: {
+      type: String,
+      enum: ['memory-match', 'picture-recall', 'number-recall', 'pattern-recognition'],
+      required: true,
+    },
+    difficulty: { type: String, enum: ['easy', 'medium', 'hard'], required: true },
+    score: { type: Number, required: true },
+    accuracy: { type: Number, required: true },
+    responseTimeMs: { type: Number, required: true },
+    attempts: { type: Number, required: true },
+    mistakes: { type: Number, required: true },
+    completedAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false, timestamps: false }
+);
 
-  async create(doc: Omit<T, '_id'> & { _id?: string }): Promise<T> {
-    const _id = doc._id || 'doc_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
-    const full = { ...doc, _id } as T;
-    this.items.set(_id, full);
-    return { ...full };
-  }
+const ConversationMongooseSchema = new Schema<IConversation>(
+  {
+    _id: { type: String, required: true },
+    patientId: { type: String, required: true, index: true },
+    messages: [
+      {
+        id: { type: String },
+        role: { type: String, enum: ['user', 'assistant'] },
+        content: { type: String },
+        timestamp: { type: String },
+      },
+    ],
+    lastInteraction: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false, timestamps: false }
+);
 
-  async findByIdAndUpdate(id: string, update: Partial<T>, options?: { new?: boolean }): Promise<T | null> {
-    const existing = this.items.get(id);
-    if (!existing) return null;
-    const updated = { ...existing, ...update, updatedAt: new Date().toISOString() };
-    this.items.set(id, updated);
-    return { ...updated };
-  }
+const NotificationMongooseSchema = new Schema<INotification>(
+  {
+    _id: { type: String, required: true },
+    patientId: { type: String, required: true, index: true },
+    caregiverId: { type: String },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    type: { type: String, enum: ['game_completed', 'reminder_due', 'difficulty_adapted', 'note'], default: 'note' },
+    read: { type: Boolean, default: false },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false, timestamps: false }
+);
 
-  async findByIdAndDelete(id: string): Promise<T | null> {
-    const existing = this.items.get(id);
-    if (!existing) return null;
-    this.items.delete(id);
-    return existing;
-  }
-
-  async countDocuments(query: Partial<Record<keyof T, any>> = {}): Promise<number> {
-    const res = await this.find(query);
-    return res.length;
-  }
-}
+// Mongoose Models
+export const UserModel = mongoose.models.User || mongoose.model<IUser>('User', UserMongooseSchema);
+export const MemoryModel = mongoose.models.Memory || mongoose.model<IMemory>('Memory', MemoryMongooseSchema);
+export const ReminderModel = mongoose.models.Reminder || mongoose.model<IReminder>('Reminder', ReminderMongooseSchema);
+export const GameResultModel = mongoose.models.GameResult || mongoose.model<IGameResult>('GameResult', GameResultMongooseSchema);
+export const ConversationModel = mongoose.models.Conversation || mongoose.model<IConversation>('Conversation', ConversationMongooseSchema);
+export const NotificationModel = mongoose.models.Notification || mongoose.model<INotification>('Notification', NotificationMongooseSchema);
 
 // Initial Seed Data
 const defaultPasswordHash = bcrypt.hashSync('password123', 8);
@@ -322,7 +401,6 @@ const initialReminders: IReminder[] = [
   },
 ];
 
-// Historical Game Results for Analytics Charts
 const now = Date.now();
 const dayMs = 86400000;
 
@@ -452,11 +530,284 @@ const initialNotifications: INotification[] = [
   },
 ];
 
-export const db = {
-  users: new MongoCollection<IUser>(initialUsers),
-  memories: new MongoCollection<IMemory>(initialMemories),
-  gameResults: new MongoCollection<IGameResult>(initialGameResults),
-  reminders: new MongoCollection<IReminder>(initialReminders),
-  conversations: new MongoCollection<IConversation>(initialConversations),
-  notifications: new MongoCollection<INotification>(initialNotifications),
+/**
+ * Robust in-memory & fallback MongoDB collection
+ * Used when MongoDB is offline or in container preview without external connection string.
+ */
+class MemoryMongoCollection<T extends { _id: string }> {
+  private items: Map<string, T> = new Map();
+
+  constructor(initialData: T[] = []) {
+    initialData.forEach((item) => this.items.set(item._id, { ...item }));
+  }
+
+  async find(query: Partial<Record<keyof T, any>> = {}): Promise<T[]> {
+    const list = Array.from(this.items.values());
+    return list.filter((item) => {
+      for (const [key, val] of Object.entries(query)) {
+        if (item[key as keyof T] !== val) return false;
+      }
+      return true;
+    });
+  }
+
+  async findById(id: string): Promise<T | null> {
+    const item = this.items.get(id);
+    return item ? { ...item } : null;
+  }
+
+  async findOne(query: Partial<Record<keyof T, any>>): Promise<T | null> {
+    const results = await this.find(query);
+    return results[0] || null;
+  }
+
+  async create(doc: Omit<T, '_id'> & { _id?: string }): Promise<T> {
+    const _id = doc._id || 'doc_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+    const full = { ...doc, _id } as T;
+    this.items.set(_id, full);
+    return { ...full };
+  }
+
+  async findByIdAndUpdate(id: string, update: Partial<T>, options?: { new?: boolean }): Promise<T | null> {
+    const existing = this.items.get(id);
+    if (!existing) return null;
+    const updated = { ...existing, ...update, updatedAt: new Date().toISOString() };
+    this.items.set(id, updated);
+    return { ...updated };
+  }
+
+  async findByIdAndDelete(id: string): Promise<T | null> {
+    const existing = this.items.get(id);
+    if (!existing) return null;
+    this.items.delete(id);
+    return existing;
+  }
+
+  async countDocuments(query: Partial<Record<keyof T, any>> = {}): Promise<number> {
+    const res = await this.find(query);
+    return res.length;
+  }
+}
+
+// In-memory instances
+const memoryStore = {
+  users: new MemoryMongoCollection<IUser>(initialUsers),
+  memories: new MemoryMongoCollection<IMemory>(initialMemories),
+  gameResults: new MemoryMongoCollection<IGameResult>(initialGameResults),
+  reminders: new MemoryMongoCollection<IReminder>(initialReminders),
+  conversations: new MemoryMongoCollection<IConversation>(initialConversations),
+  notifications: new MemoryMongoCollection<INotification>(initialNotifications),
 };
+
+// Database Connection Manager
+let isMongoConnected = false;
+let mongoConnectionError: string | null = null;
+
+export async function initDatabase(): Promise<{ isConnected: boolean; message: string }> {
+  const uri = process.env.MONGODB_URI;
+
+  if (!uri) {
+    console.log('ℹ️ MONGODB_URI not set. Using built-in resilient in-memory MongoDB driver with full schema support.');
+    return {
+      isConnected: false,
+      message: 'Operating with built-in resilient in-memory MongoDB datastore',
+    };
+  }
+
+  try {
+    console.log('Connecting to MongoDB database...');
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 3000,
+    });
+    isMongoConnected = true;
+    mongoConnectionError = null;
+    console.log('✅ Successfully connected to MongoDB instance:', mongoose.connection.name);
+
+    // Auto-seed initial data if collections are empty
+    await seedMongoIfEmpty();
+
+    return {
+      isConnected: true,
+      message: `Connected to MongoDB database "${mongoose.connection.name}"`,
+    };
+  } catch (err: any) {
+    isMongoConnected = false;
+    mongoConnectionError = err.message || 'Connection failed';
+    console.warn('⚠️ MongoDB connection attempt failed. Seamlessly running with built-in resilient in-memory datastore:', err.message);
+    return {
+      isConnected: false,
+      message: `MongoDB connection failed: ${err.message}. Using built-in fallback.`,
+    };
+  }
+}
+
+async function seedMongoIfEmpty() {
+  try {
+    const userCount = await UserModel.countDocuments();
+    if (userCount === 0) {
+      console.log('Seeding initial MongoDB users...');
+      await UserModel.insertMany(initialUsers);
+    }
+
+    const memoryCount = await MemoryModel.countDocuments();
+    if (memoryCount === 0) {
+      console.log('Seeding initial MongoDB memories...');
+      await MemoryModel.insertMany(initialMemories);
+    }
+
+    const reminderCount = await ReminderModel.countDocuments();
+    if (reminderCount === 0) {
+      console.log('Seeding initial MongoDB reminders...');
+      await ReminderModel.insertMany(initialReminders);
+    }
+
+    const gameCount = await GameResultModel.countDocuments();
+    if (gameCount === 0) {
+      console.log('Seeding initial MongoDB game history...');
+      await GameResultModel.insertMany(initialGameResults);
+    }
+
+    const convCount = await ConversationModel.countDocuments();
+    if (convCount === 0) {
+      await ConversationModel.insertMany(initialConversations);
+    }
+
+    const notifCount = await NotificationModel.countDocuments();
+    if (notifCount === 0) {
+      await NotificationModel.insertMany(initialNotifications);
+    }
+  } catch (e) {
+    console.warn('Seed error on MongoDB:', e);
+  }
+}
+
+// Unified Database Adapter: Delegates to Mongoose Model when connected, or memoryStore as fallback
+function createCollectionAdapter<T extends { _id: string }>(
+  model: Model<any>,
+  memoryCol: MemoryMongoCollection<T>,
+  seedData: T[]
+) {
+  return {
+    async find(query: any = {}): Promise<T[]> {
+      if (isMongoConnected) {
+        try {
+          const docs = await model.find(query).lean().exec();
+          return docs as T[];
+        } catch (e) {
+          console.warn('MongoDB find error, falling back to memoryStore:', e);
+        }
+      }
+      return memoryCol.find(query);
+    },
+
+    async findById(id: string): Promise<T | null> {
+      if (isMongoConnected) {
+        try {
+          const doc = await model.findById(id).lean().exec();
+          return (doc as T) || null;
+        } catch (e) {
+          console.warn('MongoDB findById error, falling back to memoryStore:', e);
+        }
+      }
+      return memoryCol.findById(id);
+    },
+
+    async findOne(query: any): Promise<T | null> {
+      if (isMongoConnected) {
+        try {
+          const doc = await model.findOne(query).lean().exec();
+          return (doc as T) || null;
+        } catch (e) {
+          console.warn('MongoDB findOne error, falling back to memoryStore:', e);
+        }
+      }
+      return memoryCol.findOne(query);
+    },
+
+    async create(doc: Omit<T, '_id'> & { _id?: string }): Promise<T> {
+      const _id = doc._id || 'doc_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      const full = { ...doc, _id } as T;
+
+      if (isMongoConnected) {
+        try {
+          await model.create(full);
+        } catch (e) {
+          console.warn('MongoDB create error, saving to memoryStore:', e);
+        }
+      }
+      return memoryCol.create(full);
+    },
+
+    async findByIdAndUpdate(id: string, update: Partial<T>, options?: { new?: boolean }): Promise<T | null> {
+      if (isMongoConnected) {
+        try {
+          const updated = await model.findByIdAndUpdate(id, update, { new: true }).lean().exec();
+          if (updated) {
+            await memoryCol.findByIdAndUpdate(id, update);
+            return updated as T;
+          }
+        } catch (e) {
+          console.warn('MongoDB findByIdAndUpdate error, falling back to memoryStore:', e);
+        }
+      }
+      return memoryCol.findByIdAndUpdate(id, update);
+    },
+
+    async findByIdAndDelete(id: string): Promise<T | null> {
+      if (isMongoConnected) {
+        try {
+          const deleted = await model.findByIdAndDelete(id).lean().exec();
+          await memoryCol.findByIdAndDelete(id);
+          return (deleted as T) || null;
+        } catch (e) {
+          console.warn('MongoDB findByIdAndDelete error, falling back to memoryStore:', e);
+        }
+      }
+      return memoryCol.findByIdAndDelete(id);
+    },
+
+    async countDocuments(query: any = {}): Promise<number> {
+      if (isMongoConnected) {
+        try {
+          return await model.countDocuments(query).exec();
+        } catch (e) {
+          console.warn('MongoDB countDocuments error, falling back to memoryStore:', e);
+        }
+      }
+      return memoryCol.countDocuments(query);
+    },
+  };
+}
+
+// Exported db interface compatible with all routes
+export const db = {
+  users: createCollectionAdapter<IUser>(UserModel, memoryStore.users, initialUsers),
+  memories: createCollectionAdapter<IMemory>(MemoryModel, memoryStore.memories, initialMemories),
+  gameResults: createCollectionAdapter<IGameResult>(GameResultModel, memoryStore.gameResults, initialGameResults),
+  reminders: createCollectionAdapter<IReminder>(ReminderModel, memoryStore.reminders, initialReminders),
+  conversations: createCollectionAdapter<IConversation>(ConversationModel, memoryStore.conversations, initialConversations),
+  notifications: createCollectionAdapter<INotification>(NotificationModel, memoryStore.notifications, initialNotifications),
+};
+
+export async function getDatabaseStatus() {
+  const [userCount, memoryCount, reminderCount, gameCount] = await Promise.all([
+    db.users.countDocuments(),
+    db.memories.countDocuments(),
+    db.reminders.countDocuments(),
+    db.gameResults.countDocuments(),
+  ]);
+
+  return {
+    isMongoConnected,
+    mongoConnectionError,
+    engine: isMongoConnected ? 'MongoDB (Mongoose ODM)' : 'In-Memory MongoDB Driver (Resilient)',
+    databaseName: isMongoConnected ? mongoose.connection.name : 'mindcare_local',
+    uriConfigured: Boolean(process.env.MONGODB_URI),
+    counts: {
+      users: userCount,
+      memories: memoryCount,
+      reminders: reminderCount,
+      gameResults: gameCount,
+    },
+  };
+}

@@ -30,12 +30,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Token invalid, clear it
           localStorage.removeItem('mindcare_token');
           setToken(null);
-          // Fall back to default demo user Eleanor
-          await switchDemoUser('patient');
+          setUser(null);
         }
       } else {
-        // Initial setup: start as Eleanor (patient) for instant interactive experience
-        await switchDemoUser('patient');
+        // Newly appeared user starts in unauthenticated state
+        setUser(null);
       }
       setIsLoading(false);
     };

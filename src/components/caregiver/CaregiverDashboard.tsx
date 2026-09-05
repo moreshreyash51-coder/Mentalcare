@@ -19,6 +19,14 @@ import {
   BarChart3,
   Activity,
   UserCheck,
+  Database,
+  Lock,
+  LogOut,
+  Music,
+  Volume2,
+  CheckSquare,
+  Play,
+  Square,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -35,18 +43,24 @@ import {
 } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { GameProgress, GameResult, Memory, Reminder, User } from '../../types';
+import { GameProgress, GameResult, Memory, Reminder, User, DatabaseStatus } from '../../types';
+import { SignOutConfirmModal } from '../auth/SignOutConfirmModal';
+import { reminderAudio } from '../../utils/reminderAudio';
 
 export const CaregiverDashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'memories' | 'reminders' | 'ai-insights'>('analytics');
+  const [allPatients, setAllPatients] = useState<User[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(() => user?.patientId || 'patient_eleanor');
   const [patient, setPatient] = useState<User | null>(null);
   const [progress, setProgress] = useState<GameProgress | null>(null);
   const [gameHistory, setGameHistory] = useState<GameResult[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [dbStatus, setDbStatus] = useState<DatabaseStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   // Modals / forms state
   const [showAddMemoryModal, setShowAddMemoryModal] = useState(false);
@@ -64,31 +78,55 @@ export const CaregiverDashboard: React.FC = () => {
 
   const [newReminder, setNewReminder] = useState({
     title: '',
-    category: 'medication' as any,
+    category: 'task' as any,
     time: '10:00 AM',
-    frequency: 'daily' as any,
+    frequency: 'Daily',
+    recurrence: 'Daily',
     description: '',
+    priority: 'normal' as 'normal' | 'high' | 'urgent',
+    soundEnabled: true,
   });
+
+  const [isSongPlaying, setIsSongPlaying] = useState(false);
+
+  useEffect(() => {
+    const unsub = reminderAudio.subscribe((playing) => setIsSongPlaying(playing));
+    return () => unsub();
+  }, []);
 
   const [difficultyUpdateMsg, setDifficultyUpdateMsg] = useState<string | null>(null);
 
-  const pId = 'patient_eleanor';
+  const pId = selectedPatientId || user?.patientId || 'patient_eleanor';
 
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [patData, progData, histData, memData, remData] = await Promise.all([
-        api.getPatient(pId),
-        api.getGameProgress(pId),
-        api.getGameResults(pId),
-        api.getMemories(pId),
-        api.getReminders(pId),
+      const [patList, dbData] = await Promise.all([
+        api.getPatients().catch(() => []),
+        api.getDatabaseStatus().catch(() => null),
       ]);
-      setPatient(patData);
-      setProgress(progData);
+      setAllPatients(patList);
+
+      let targetId = selectedPatientId;
+      if (!targetId && patList.length > 0) {
+        targetId = patList[0]._id;
+        setSelectedPatientId(targetId);
+      }
+
+      const [patData, progData, histData, memData, remData] = await Promise.all([
+        api.getPatient(targetId).catch(() => null),
+        api.getGameProgress(targetId).catch(() => null),
+        api.getGameResults(targetId).catch(() => []),
+        api.getMemories(targetId).catch(() => []),
+        api.getReminders(targetId).catch(() => []),
+      ]);
+
+      if (patData) setPatient(patData);
+      if (progData) setProgress(progData);
       setGameHistory(histData);
       setMemories(memData);
       setReminders(remData);
+      if (dbData) setDbStatus(dbData);
     } catch (err) {
       console.warn('Error loading caregiver portal data:', err);
     } finally {
@@ -98,7 +136,7 @@ export const CaregiverDashboard: React.FC = () => {
 
   useEffect(() => {
     loadAllData();
-  }, []);
+  }, [selectedPatientId]);
 
   // Update adaptive difficulty setting directly
   const handleDifficultyChange = async (newDiff: 'easy' | 'medium' | 'hard') => {
@@ -147,28 +185,50 @@ export const CaregiverDashboard: React.FC = () => {
     }
   };
 
-  // Reminder creation
+  // Reminder / Task creation
   const handleCreateReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newReminder.title) return;
 
     try {
       const created = await api.createReminder({
-        ...newReminder,
         patientId: pId,
+        title: newReminder.title,
+        category: newReminder.category,
+        time: newReminder.time,
+        recurrence: newReminder.recurrence || 'Daily',
+        priority: newReminder.priority || 'normal',
+        notes: newReminder.description,
+        description: newReminder.description,
+        soundEnabled: newReminder.soundEnabled,
+        soundTune: 'soothing-song',
         completed: false,
       });
       setReminders((prev) => [...prev, created]);
       setShowAddReminderModal(false);
+      reminderAudio.playGentleChime();
       setNewReminder({
         title: '',
-        category: 'medication',
+        category: 'task' as any,
         time: '10:00 AM',
-        frequency: 'daily',
+        frequency: 'Daily',
+        recurrence: 'Daily',
         description: '',
+        priority: 'normal',
+        soundEnabled: true,
       });
     } catch (err) {
       console.warn('Failed to create reminder:', err);
+    }
+  };
+
+  const handleToggleReminderComplete = async (r: Reminder) => {
+    const newStatus = !r.completed;
+    try {
+      const updated = await api.updateReminder(r._id, { completed: newStatus });
+      setReminders((prev) => prev.map((item) => (item._id === r._id ? updated : item)));
+    } catch (e) {
+      console.warn('Failed to toggle reminder status:', e);
     }
   };
 
@@ -199,9 +259,20 @@ export const CaregiverDashboard: React.FC = () => {
       <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 bg-indigo-500/30 px-3.5 py-1 rounded-full text-xs font-bold text-indigo-200 uppercase tracking-wider">
-              <UserCheck className="w-4 h-4" />
-              <span>Caregiver Companion Portal</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 bg-indigo-500/30 px-3.5 py-1 rounded-full text-xs font-bold text-indigo-200 uppercase tracking-wider">
+                <UserCheck className="w-4 h-4" />
+                <span>Caregiver Companion Portal</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-400/40 px-3 py-1 rounded-full text-xs font-bold text-emerald-200">
+                <Database className="w-3.5 h-3.5 text-emerald-300" />
+                <span>{dbStatus?.isMongoConnected ? 'MongoDB Connected' : 'MongoDB Engine Active'}</span>
+                {dbStatus && (
+                  <span className="text-[10px] text-emerald-300/80 ml-1">
+                    ({dbStatus.counts.memories} memories, {dbStatus.counts.reminders} reminders)
+                  </span>
+                )}
+              </div>
             </div>
             <h1 id="caregiver-welcome-title" className="text-3xl sm:text-4xl font-black tracking-tight">
               Monitoring & Care for {patient?.name || 'Eleanor Vance'}
@@ -209,35 +280,72 @@ export const CaregiverDashboard: React.FC = () => {
             <p className="text-indigo-200 text-sm sm:text-base max-w-2xl">
               Track cognitive gaming performance, adjust adaptive challenge levels, enrich the memory album, and schedule gentle daily reminders.
             </p>
+
+            {/* Dynamic Registered Patient Selector */}
+            {allPatients.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
+                  Active Patient:
+                </span>
+                <select
+                  id="caregiver-patient-select"
+                  value={selectedPatientId}
+                  onChange={(e) => setSelectedPatientId(e.target.value)}
+                  className="bg-indigo-950/80 border border-indigo-400/40 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-black text-white focus:outline-hidden cursor-pointer"
+                >
+                  {allPatients.map((p) => (
+                    <option key={p._id} value={p._id} className="bg-slate-900 text-white font-normal">
+                      {p.name} ({p.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
-          {/* Quick Adaptive Challenge Selector */}
-          <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-4 rounded-2xl space-y-2 flex-shrink-0">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">
-                Adaptive Difficulty:
-              </span>
-              {difficultyUpdateMsg && (
-                <span className="text-[11px] font-bold text-emerald-300 animate-pulse">
-                  {difficultyUpdateMsg}
+          {/* Quick Controls & Adaptive Challenge Selector */}
+          <div className="space-y-3 flex-shrink-0">
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-4 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">
+                  Adaptive Difficulty:
                 </span>
-              )}
+                {difficultyUpdateMsg && (
+                  <span className="text-[11px] font-bold text-emerald-300 animate-pulse">
+                    {difficultyUpdateMsg}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                {(['easy', 'medium', 'hard'] as const).map((diff) => (
+                  <button
+                    key={diff}
+                    id={`set-diff-${diff}`}
+                    onClick={() => handleDifficultyChange(diff)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      patient?.cognitiveDifficulty === diff
+                        ? 'bg-emerald-500 text-white shadow-xs scale-105'
+                        : 'bg-white/10 hover:bg-white/20 text-indigo-100'
+                    }`}
+                  >
+                    {diff}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                <button
-                  key={diff}
-                  id={`set-diff-${diff}`}
-                  onClick={() => handleDifficultyChange(diff)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                    patient?.cognitiveDifficulty === diff
-                      ? 'bg-emerald-500 text-white shadow-xs scale-105'
-                      : 'bg-white/10 hover:bg-white/20 text-indigo-100'
-                  }`}
-                >
-                  {diff}
-                </button>
-              ))}
+
+            {/* Direct Sign Out Button */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                id="caregiver-banner-signout-btn"
+                onClick={() => setShowSignOutConfirm(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 hover:bg-rose-600 text-white border border-white/20 text-xs font-bold transition-all cursor-pointer"
+                title="Sign Out of Caregiver Account"
+              >
+                <LogOut className="w-4 h-4 text-rose-300" />
+                <span>Sign Out</span>
+              </button>
             </div>
           </div>
         </div>
@@ -491,56 +599,121 @@ export const CaregiverDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: REMINDERS MANAGEMENT */}
+      {/* TAB 3: REMINDERS & TASK SCHEDULE */}
       {activeTab === 'reminders' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="font-extrabold text-2xl text-slate-900">Schedule & Daily Routine</h3>
+              <h3 className="font-extrabold text-2xl text-slate-900">Patient Schedule & Task Reminders</h3>
               <p className="text-slate-600 text-sm">
-                Create structured routines for medications, water intake, walks, and family calls.
+                Schedule medications, hydration, daily tasks, walks, and calls. Each reminder alerts with our default calming song.
               </p>
             </div>
-            <button
-              id="add-reminder-btn"
-              onClick={() => setShowAddReminderModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-2xl shadow-sm cursor-pointer transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Add Reminder</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isSongPlaying) {
+                    reminderAudio.stop();
+                  } else {
+                    reminderAudio.playDefaultReminderSong(false);
+                  }
+                }}
+                className={`px-3.5 py-2 rounded-2xl border text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isSongPlaying
+                    ? 'bg-amber-500 text-white border-amber-600 animate-pulse'
+                    : 'bg-white hover:bg-amber-50 text-amber-900 border-amber-300 shadow-2xs'
+                }`}
+              >
+                {isSongPlaying ? (
+                  <>
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                    <span>Stop Song</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Test Reminder Melody 🎵</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                id="add-reminder-btn"
+                onClick={() => setShowAddReminderModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-2xl shadow-sm cursor-pointer transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Add Task / Reminder</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-3xl border border-slate-200 divide-y divide-slate-100 overflow-hidden shadow-xs">
             {reminders.map((r) => (
-              <div key={r._id} className="p-5 flex items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase">
+              <div key={r._id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase">
                       {r.time}
                     </span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 capitalize">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 capitalize">
                       {r.category}
                     </span>
+                    {r.priority === 'urgent' && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-600 text-white uppercase">
+                        Urgent
+                      </span>
+                    )}
+                    {r.soundEnabled !== false && (
+                      <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Music className="w-3 h-3 text-amber-600" />
+                        <span>Melody Song</span>
+                      </span>
+                    )}
                     {r.completed && (
                       <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        Completed
+                        ✓ Completed
                       </span>
                     )}
                   </div>
-                  <h4 className="font-extrabold text-lg text-slate-900">{r.title}</h4>
-                  {r.description && <p className="text-sm text-slate-600">{r.description}</p>}
+                  <h4 className={`font-extrabold text-lg text-slate-900 ${r.completed ? 'line-through text-slate-400' : ''}`}>
+                    {r.title}
+                  </h4>
+                  {(r.description || r.notes) && (
+                    <p className="text-sm text-slate-600">{r.description || r.notes}</p>
+                  )}
                 </div>
 
-                <button
-                  onClick={() => handleDeleteReminder(r._id)}
-                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                  title="Delete Reminder"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleReminderComplete(r)}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                      r.completed
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {r.completed ? 'Mark Incomplete' : 'Mark Done'}
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteReminder(r._id)}
+                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                    title="Delete Reminder"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
+
+            {reminders.length === 0 && (
+              <div className="p-8 text-center text-slate-500">
+                No tasks or reminders scheduled for this patient. Click "Add Task / Reminder" above to get started.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -676,20 +849,31 @@ export const CaregiverDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Add Reminder */}
+      {/* Modal: Add Reminder or Task */}
       {showAddReminderModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl">
-            <h3 className="font-black text-2xl text-slate-900">Add Reminder</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-2xl text-slate-900">Add Task or Reminder</h3>
+                <p className="text-xs text-slate-500">Scheduled for {patient?.name || 'your loved one'}</p>
+              </div>
+              <span className="p-2.5 rounded-2xl bg-amber-100 text-amber-800">
+                <Bell className="w-6 h-6" />
+              </span>
+            </div>
+
             <form onSubmit={handleCreateReminder} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Reminder Title</label>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                  Title / Action Name
+                </label>
                 <input
                   type="text"
                   required
                   value={newReminder.title}
                   onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
-                  placeholder="e.g., Afternoon Walk in Garden"
+                  placeholder="e.g., Afternoon Walk in Garden or Water Plants"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-amber-500"
                 />
               </div>
@@ -702,11 +886,13 @@ export const CaregiverDashboard: React.FC = () => {
                     onChange={(e) => setNewReminder({ ...newReminder, category: e.target.value as any })}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-amber-500"
                   >
-                    <option value="medication">Medication</option>
-                    <option value="hydration">Hydration</option>
-                    <option value="meal">Meal</option>
-                    <option value="appointment">Appointment</option>
-                    <option value="activity">Activity</option>
+                    <option value="task">Task / Chore 📋</option>
+                    <option value="routine">Daily Routine 🔄</option>
+                    <option value="medication">Medication 💊</option>
+                    <option value="hydration">Hydration 💧</option>
+                    <option value="meal">Meal 🍲</option>
+                    <option value="appointment">Appointment 📅</option>
+                    <option value="activity">Brain Exercise / Activity 🧠</option>
                   </select>
                 </div>
                 <div>
@@ -715,9 +901,38 @@ export const CaregiverDashboard: React.FC = () => {
                     type="text"
                     value={newReminder.time}
                     onChange={(e) => setNewReminder({ ...newReminder, time: e.target.value })}
-                    placeholder="e.g., 3:00 PM"
+                    placeholder="e.g., 14:00 or 2:00 PM"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-amber-500"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Priority</label>
+                  <select
+                    value={newReminder.priority}
+                    onChange={(e) => setNewReminder({ ...newReminder, priority: e.target.value as any })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Recurrence</label>
+                  <select
+                    value={newReminder.recurrence}
+                    onChange={(e) => setNewReminder({ ...newReminder, recurrence: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="Daily">Daily</option>
+                    <option value="Weekdays">Weekdays</option>
+                    <option value="Weekends">Weekends</option>
+                    <option value="Once">Once</option>
+                  </select>
                 </div>
               </div>
 
@@ -727,9 +942,61 @@ export const CaregiverDashboard: React.FC = () => {
                   type="text"
                   value={newReminder.description}
                   onChange={(e) => setNewReminder({ ...newReminder, description: e.target.value })}
-                  placeholder="e.g., Take with a full glass of water"
+                  placeholder="e.g., Take with a full glass of water or put on sun hat"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-amber-500"
                 />
+              </div>
+
+              {/* Sound Option & Melodic Song Preview */}
+              <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newReminder.soundEnabled}
+                      onChange={(e) => setNewReminder({ ...newReminder, soundEnabled: e.target.checked })}
+                      className="w-4 h-4 text-amber-600 rounded-md border-amber-300 focus:ring-amber-500"
+                    />
+                    <div>
+                      <span className="text-sm font-black text-slate-900 block">
+                        Play Default Melody Song on Alarm 🔔
+                      </span>
+                      <span className="text-xs text-slate-600">
+                        Plays a comforting, senior-friendly song designed to notify without startling.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isSongPlaying) {
+                        reminderAudio.stop();
+                      } else {
+                        reminderAudio.playDefaultReminderSong(false);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isSongPlaying
+                        ? 'bg-amber-500 text-white border-amber-600 animate-pulse'
+                        : 'bg-white hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
+                    }`}
+                  >
+                    {isSongPlaying ? (
+                      <>
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                        <span>Stop Melody</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Preview Melody Song 🎵</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">
@@ -742,15 +1009,23 @@ export const CaregiverDashboard: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl text-sm cursor-pointer"
+                  className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl text-sm cursor-pointer shadow-xs"
                 >
-                  Save Reminder
+                  Save Schedule Task
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Sign Out Confirmation Modal */}
+      <SignOutConfirmModal
+        isOpen={showSignOutConfirm}
+        onClose={() => setShowSignOutConfirm(false)}
+        onConfirm={logout}
+        userName={user?.name}
+      />
     </div>
   );
 };

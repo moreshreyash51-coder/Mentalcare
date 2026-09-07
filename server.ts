@@ -19,7 +19,7 @@ async function startServer() {
   await initDatabase();
 
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '15mb' }));
   app.use(express.urlencoded({ extended: true, limit: '15mb' }));
@@ -69,7 +69,12 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`MindCare full-stack server running on http://0.0.0.0:${PORT}`);
+    console.log(`
+  🧠 MindCare Full-Stack Application is running!
+  ➜ Local:   http://localhost:${PORT}
+  ➜ Network: http://0.0.0.0:${PORT}
+  ➜ API:     http://localhost:${PORT}/api/health
+`);
   });
 }
 

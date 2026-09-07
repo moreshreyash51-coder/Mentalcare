@@ -250,11 +250,11 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
                 {t('playMemoryGame')}
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Enjoy soothing puzzles designed to keep your mind vibrant and sharp at your own pace.
+                {t('gameDesc')}
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-emerald-700 font-bold text-sm">
-              <span>Start Game</span>
+              <span>{t('startGame')}</span>
               <span className="text-lg">→</span>
             </div>
           </button>
@@ -277,11 +277,11 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
                 {t('myMemories')}
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Flip through photos of your daughter Sarah, grandson Leo, family trips, and dear memories.
+                {t('memoriesDesc')}
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-blue-700 font-bold text-sm">
-              <span>Open Photo Book</span>
+              <span>{t('openPhotoBook')}</span>
               <span className="text-lg">→</span>
             </div>
           </button>
@@ -304,10 +304,10 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
                 </span>
               </div>
               <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug">
-                Voice & Camera AI
+                {t('voiceCameraAI')}
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Check reminders, identify pill bottles or clocks via camera, and speak naturally with your friendly companion.
+                {t('voiceCameraDesc')}
               </p>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md">
@@ -322,7 +322,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
               </div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-purple-700 font-bold text-sm">
-              <span>Open AI Assistant</span>
+              <span>{t('askAI')}</span>
               <span className="text-lg">→</span>
             </div>
           </button>
@@ -347,10 +347,10 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
                 )}
               </div>
               <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug">
-                Schedule & Reminders
+                {t('scheduleReminders')}
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Check chores, medication times, water intake, and tasks alerted by our peaceful default bell song.
+                {t('remindersDesc')}
               </p>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 <span className="text-[10px] font-black bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -363,7 +363,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
               </div>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-amber-800 font-bold text-sm">
-              <span>View Full Schedule</span>
+              <span>{t('viewAllReminders')}</span>
               <span className="text-lg">→</span>
             </div>
           </button>
@@ -383,7 +383,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-black text-xl sm:text-2xl text-slate-900">
-                  Today's Schedule & Reminders
+                  {t('scheduleReminders')}
                 </h3>
                 <span className="text-xs font-bold bg-amber-200/80 text-amber-900 px-2.5 py-0.5 rounded-full hidden sm:inline">
                   Melodic Alert Ready
@@ -417,12 +417,12 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
               {isSongPlaying ? (
                 <>
                   <Square className="w-3.5 h-3.5 fill-current" />
-                  <span>Stop Song</span>
+                  <span>{t('stopMelody')}</span>
                 </>
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Play Reminder Song 🎵</span>
+                  <span>{t('testReminderMelody')}</span>
                 </>
               )}
             </button>
@@ -435,7 +435,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
               className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-black transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
               <Plus className="w-4 h-4" />
-              <span>Schedule / Add</span>
+              <span>{t('addTaskReminder')}</span>
             </button>
           </div>
         </div>

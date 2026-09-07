@@ -26,11 +26,13 @@ export const speech = {
       // Pick warm natural voice if available
       const voices = window.speechSynthesis.getVoices();
       if (voices.length > 0) {
-        const preferredVoice = voices.find(
-          (v) =>
-            v.lang.startsWith(options.language?.slice(0, 2) || 'en') &&
-            (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Karen'))
-        );
+        const langPrefix = options.language?.slice(0, 2) || 'en';
+        const preferredVoice =
+          voices.find((v) => v.lang.startsWith(langPrefix) && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Karen'))) ||
+          voices.find((v) => v.lang.startsWith(langPrefix)) ||
+          voices.find((v) => v.lang.startsWith('en-IN') || v.lang.startsWith('hi-IN')) ||
+          voices[0];
+
         if (preferredVoice) {
           utterance.voice = preferredVoice;
         }
@@ -48,10 +50,12 @@ export const speech = {
     }
   },
 
-  // Speech Recognition listener
+  // Enhanced Speech Recognition listener with interim results and fallback
   startListening(callbacks: {
     onResult: (transcript: string) => void;
+    onInterimResult?: (interim: string) => void;
     onError?: (err: any) => void;
+    onStart?: () => void;
     onEnd?: () => void;
     language?: string;
   }): { stop: () => void } | null {
@@ -63,16 +67,46 @@ export const speech = {
     try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.continuous = true;
+      recognition.interimResults = true;
       recognition.lang = callbacks.language || 'en-US';
 
+      let finalTranscript = '';
+
+      recognition.onstart = () => {
+        callbacks.onStart?.();
+      };
+
       recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        callbacks.onResult(transcript);
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const part = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += (finalTranscript ? ' ' : '') + part;
+          } else {
+            interimTranscript += part;
+          }
+        }
+
+        if (callbacks.onInterimResult) {
+          callbacks.onInterimResult(finalTranscript + (interimTranscript ? ' ' + interimTranscript : ''));
+        }
+
+        if (finalTranscript.trim()) {
+          callbacks.onResult(finalTranscript.trim());
+        }
       };
 
       recognition.onerror = (event: any) => {
+        // If language error occurs, retry with en-IN or en-US fallback
+        if (event.error === 'language-not-supported' && callbacks.language !== 'en-US') {
+          console.warn(`Language ${callbacks.language} not supported for STT, falling back to English`);
+          try {
+            recognition.lang = 'en-US';
+            recognition.start();
+            return;
+          } catch (_) {}
+        }
         callbacks.onError?.(event.error);
       };
 

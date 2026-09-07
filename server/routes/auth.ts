@@ -9,7 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mindcare_super_secret_jwt_key_2026
 // POST /api/auth/register
 authRouter.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password, role, patientId, emergencyContact, language } = req.body;
+    const { name, email, password, role, gender, avatar, patientId, emergencyContact, language } = req.body;
 
     if (!name || !email || !password || !role) {
       res.status(400).json({ error: 'Name, email, password, and role are required.' });
@@ -22,16 +22,31 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    const userGender = gender === 'male' || gender === 'female' ? gender : 'female';
+
+    // Default avatar based on role and gender
+    let assignedAvatar = avatar;
+    if (!assignedAvatar) {
+      if (role === 'caregiver') {
+        assignedAvatar = userGender === 'male'
+          ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
+          : 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&auto=format&fit=crop&q=80';
+      } else {
+        assignedAvatar = userGender === 'male'
+          ? 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80'
+          : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80';
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = await db.users.create({
       name,
       email: email.toLowerCase().trim(),
       password: hashedPassword,
       role: role === 'caregiver' ? 'caregiver' : 'patient',
+      gender: userGender,
       patientId: role === 'caregiver' ? (patientId || 'patient_eleanor') : undefined,
-      avatar: role === 'caregiver'
-        ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80'
-        : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+      avatar: assignedAvatar,
       emergencyContact,
       language: language || 'en',
       accessibilitySettings: {
@@ -245,5 +260,55 @@ authRouter.get('/me', async (req: Request, res: Response): Promise<void> => {
     res.json({ user: userSafe });
   } catch (err: any) {
     res.status(401).json({ error: 'Invalid or expired session token' });
+  }
+});
+
+// PUT /api/auth/profile
+authRouter.put('/profile', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing authorization token' });
+      return;
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const existing = await db.users.findById(decoded.userId);
+
+    if (!existing) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const { name, gender, avatar, dateOfBirth, emergencyContact, language, accessibilitySettings, cognitiveDifficulty } = req.body;
+
+    const updates: any = {
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (name) updates.name = name;
+    if (gender) updates.gender = gender;
+    if (avatar) updates.avatar = avatar;
+    if (dateOfBirth) updates.dateOfBirth = dateOfBirth;
+    if (emergencyContact) updates.emergencyContact = emergencyContact;
+    if (language) updates.language = language;
+    if (accessibilitySettings) updates.accessibilitySettings = accessibilitySettings;
+    if (cognitiveDifficulty) updates.cognitiveDifficulty = cognitiveDifficulty;
+
+    const updated = await db.users.findByIdAndUpdate(decoded.userId, updates);
+    if (!updated) {
+      res.status(404).json({ error: 'User not found after update' });
+      return;
+    }
+
+    const { password: _, ...userSafe } = updated;
+    res.json({
+      message: 'Profile updated successfully',
+      user: userSafe,
+    });
+  } catch (err: any) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Failed to update user profile' });
   }
 });

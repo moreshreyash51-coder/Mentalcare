@@ -15,8 +15,9 @@ import {
   CheckSquare,
   AlertCircle,
   X,
+  Music,
 } from 'lucide-react';
-import { Reminder } from '../../types';
+import { Reminder, REMINDER_TUNES } from '../../types';
 import { reminderAudio } from '../../utils/reminderAudio';
 import { useAccessibility } from '../../context/AccessibilityContext';
 
@@ -38,6 +39,8 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
   const { speakText, fontSize } = useAccessibility();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(() => reminderAudio.isMuted());
+  const [currentTune, setCurrentTune] = useState<string>('morning-bells');
+  const [volume, setVolume] = useState<number>(() => reminderAudio.getVolume());
 
   useEffect(() => {
     const unsub = reminderAudio.subscribe((playing) => {
@@ -48,8 +51,10 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
 
   useEffect(() => {
     if (isOpen && reminder) {
+      const tuneToPlay = reminder.soundTune || 'morning-bells';
+      setCurrentTune(tuneToPlay);
       if (reminder.soundEnabled !== false && !reminderAudio.isMuted()) {
-        reminderAudio.playDefaultReminderSong(true);
+        reminderAudio.playTune(tuneToPlay, true);
       }
       // Voice announcement for elderly patients
       speakText(
@@ -68,13 +73,27 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
 
   if (!isOpen || !reminder) return null;
 
+  const activeTuneObj = REMINDER_TUNES.find((t) => t.id === currentTune) || REMINDER_TUNES[0];
+
   const handleMuteToggle = () => {
     const next = !isMuted;
     setIsMuted(next);
     reminderAudio.setMuted(next);
     if (!next) {
-      reminderAudio.playDefaultReminderSong(true);
+      reminderAudio.playTune(currentTune, true);
     }
+  };
+
+  const handleSwitchTune = (newTuneId: string) => {
+    setCurrentTune(newTuneId);
+    if (!isMuted) {
+      reminderAudio.playTune(newTuneId, true);
+    }
+  };
+
+  const handleVolumeChange = (newVal: number) => {
+    setVolume(newVal);
+    reminderAudio.setVolume(newVal);
   };
 
   const handleMarkDone = () => {
@@ -123,22 +142,22 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
     >
       <div
         id="reminder-alarm-card"
-        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl border-4 border-amber-400 relative overflow-hidden"
+        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl border-4 border-amber-400 relative overflow-hidden"
       >
-        {/* Animated Soundwave Banner */}
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white -mx-6 -mt-6 sm:-mx-8 sm:-mt-8 p-6 rounded-t-2xl relative">
+        {/* Animated Soundwave Banner with Song Identifier */}
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white -mx-6 -mt-6 sm:-mx-8 sm:-mt-8 p-5 rounded-t-2xl relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white animate-bounce">
-                <Bell className="w-6 h-6" />
+              <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white animate-bounce shadow-inner">
+                <Music className="w-6 h-6" />
               </div>
               <div>
-                <span className="text-xs uppercase font-black tracking-widest text-amber-100 block">
-                  MindCare Melodic Reminder
+                <span className="text-[11px] uppercase font-black tracking-widest text-amber-100 block">
+                  MindCare Real-Time Reminder
                 </span>
                 <span className="text-sm font-bold text-white flex items-center gap-2">
-                  <span>Playing Default Song</span>
-                  {isPlaying && (
+                  <span>Song: {activeTuneObj.name}</span>
+                  {isPlaying && !isMuted && (
                     <span className="inline-flex items-center gap-1">
                       <span className="w-1.5 h-3 bg-white rounded-full animate-pulse" />
                       <span className="w-1.5 h-4 bg-white rounded-full animate-pulse delay-75" />
@@ -190,7 +209,7 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
           </div>
 
           {(reminder.notes || reminder.description) && (
-            <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-2xl text-amber-950 text-sm sm:text-base leading-relaxed">
+            <div className="bg-amber-50/80 border border-amber-200 p-3.5 rounded-2xl text-amber-950 text-sm sm:text-base leading-relaxed">
               <span className="font-bold block text-xs uppercase tracking-wider text-amber-800 mb-0.5">
                 Care Instructions:
               </span>
@@ -198,9 +217,54 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
             </div>
           )}
 
+          {/* Song Switcher Pill Strip */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Music className="w-3.5 h-3.5 text-amber-600" />
+                <span>Reminder Tune ({activeTuneObj.description})</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+                <input
+                  id="alarm-modal-volume-slider"
+                  type="range"
+                  min="0.1"
+                  max="1.0"
+                  step="0.05"
+                  value={volume}
+                  onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                  className="w-16 h-1.5 accent-amber-600 rounded-lg cursor-pointer"
+                  title="Volume level"
+                  aria-label="Volume level"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              {REMINDER_TUNES.map((t) => (
+                <button
+                  key={t.id}
+                  id={`alarm-tune-select-${t.id}`}
+                  type="button"
+                  onClick={() => handleSwitchTune(t.id)}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg border whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 ${
+                    currentTune === t.id
+                      ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                      : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  <span>{t.icon}</span>
+                  <span>{t.name.split(' ')[0]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Audio helper prompt */}
-          <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+          <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
             <button
+              id="alarm-modal-listen-aloud-btn"
               type="button"
               onClick={() =>
                 speakText(
@@ -212,20 +276,20 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
               className="inline-flex items-center gap-1.5 text-teal-700 hover:text-teal-900 font-bold underline cursor-pointer"
             >
               <Volume2 className="w-4 h-4" />
-              <span>Listen Aloud</span>
+              <span>Listen Voice Announcement</span>
             </button>
-            <span className="text-slate-400">Recurrence: {reminder.recurrence || 'Daily'}</span>
+            <span className="text-slate-400">Repeats: {reminder.recurrence || 'Daily'}</span>
           </div>
         </div>
 
         {/* Action Buttons (Large, Accessible, High Contrast) */}
-        <div className="space-y-3 pt-2">
+        <div className="space-y-2.5 pt-1">
           {/* 1. Mark Done (Primary Action) */}
           <button
             id="alarm-modal-done-btn"
             type="button"
             onClick={handleMarkDone}
-            className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-lg sm:text-xl rounded-2xl shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 min-h-[60px]"
+            className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-lg sm:text-xl rounded-2xl shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-3 min-h-[58px]"
           >
             <CheckCircle2 className="w-7 h-7" />
             <span>Mark as Done</span>
@@ -237,7 +301,7 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
               id="alarm-modal-snooze-btn"
               type="button"
               onClick={handleSnooze}
-              className="py-3 px-4 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-sm sm:text-base rounded-xl border border-amber-300 transition-colors cursor-pointer flex items-center justify-center gap-2 min-h-[50px]"
+              className="py-3 px-4 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-sm sm:text-base rounded-xl border border-amber-300 transition-colors cursor-pointer flex items-center justify-center gap-2 min-h-[48px]"
             >
               <Clock className="w-4 h-4 text-amber-700" />
               <span>Snooze (5 min)</span>
@@ -248,7 +312,7 @@ export const ReminderAlarmModal: React.FC<ReminderAlarmModalProps> = ({
               id="alarm-modal-dismiss-btn"
               type="button"
               onClick={handleDismiss}
-              className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-sm sm:text-base rounded-xl border border-slate-300 transition-colors cursor-pointer flex items-center justify-center gap-2 min-h-[50px]"
+              className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-sm sm:text-base rounded-xl border border-slate-300 transition-colors cursor-pointer flex items-center justify-center gap-2 min-h-[48px]"
             >
               <X className="w-4 h-4" />
               <span>Dismiss Song</span>

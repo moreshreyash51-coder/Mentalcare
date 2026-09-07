@@ -27,6 +27,7 @@ import {
   CheckSquare,
   Play,
   Square,
+  FileText,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -42,22 +43,41 @@ import {
   Area,
 } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
+import { useAccessibility } from '../../context/AccessibilityContext';
 import { api } from '../../services/api';
-import { GameProgress, GameResult, Memory, Reminder, User, DatabaseStatus } from '../../types';
+import {
+  GameProgress,
+  GameResult,
+  Memory,
+  Reminder,
+  User,
+  DatabaseStatus,
+  CognitivePerformanceReport,
+  DEFAULT_MALE_CAREGIVER_AVATAR,
+  DEFAULT_FEMALE_CAREGIVER_AVATAR,
+  DEFAULT_MALE_PATIENT_AVATAR,
+  DEFAULT_FEMALE_PATIENT_AVATAR,
+} from '../../types';
 import { SignOutConfirmModal } from '../auth/SignOutConfirmModal';
+import { AuthModal } from '../common/AuthModal';
 import { reminderAudio } from '../../utils/reminderAudio';
+import { PatientPerformanceAnalysis } from './PatientPerformanceAnalysis';
 
 export const CaregiverDashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const { t } = useAccessibility();
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'memories' | 'reminders' | 'ai-insights'>('analytics');
+  const [activeTab, setActiveTab] = useState<'clinical-report' | 'analytics' | 'memories' | 'reminders' | 'ai-insights'>('clinical-report');
   const [allPatients, setAllPatients] = useState<User[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(() => user?.patientId || 'patient_eleanor');
   const [patient, setPatient] = useState<User | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [progress, setProgress] = useState<GameProgress | null>(null);
   const [gameHistory, setGameHistory] = useState<GameResult[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [report, setReport] = useState<CognitivePerformanceReport | null>(null);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [dbStatus, setDbStatus] = useState<DatabaseStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
@@ -98,6 +118,18 @@ export const CaregiverDashboard: React.FC = () => {
 
   const pId = selectedPatientId || user?.patientId || 'patient_eleanor';
 
+  const loadReportData = async (targetId: string) => {
+    setIsLoadingReport(true);
+    try {
+      const rep = await api.analyzePatientPerformance(targetId);
+      setReport(rep);
+    } catch (err) {
+      console.warn('Failed to fetch patient cognitive performance report:', err);
+    } finally {
+      setIsLoadingReport(false);
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     try {
@@ -127,6 +159,9 @@ export const CaregiverDashboard: React.FC = () => {
       setMemories(memData);
       setReminders(remData);
       if (dbData) setDbStatus(dbData);
+
+      // Also trigger initial report loading
+      loadReportData(targetId);
     } catch (err) {
       console.warn('Error loading caregiver portal data:', err);
     } finally {
@@ -198,18 +233,16 @@ export const CaregiverDashboard: React.FC = () => {
         time: newReminder.time,
         recurrence: newReminder.recurrence || 'Daily',
         priority: newReminder.priority || 'normal',
-        notes: newReminder.description,
         description: newReminder.description,
-        soundEnabled: newReminder.soundEnabled,
-        soundTune: 'soothing-song',
+        notes: newReminder.description,
+        soundEnabled: newReminder.soundEnabled !== false,
         completed: false,
       });
-      setReminders((prev) => [...prev, created]);
+      setReminders((prev) => [created, ...prev]);
       setShowAddReminderModal(false);
-      reminderAudio.playGentleChime();
       setNewReminder({
         title: '',
-        category: 'task' as any,
+        category: 'task',
         time: '10:00 AM',
         frequency: 'Daily',
         recurrence: 'Daily',
@@ -223,9 +256,8 @@ export const CaregiverDashboard: React.FC = () => {
   };
 
   const handleToggleReminderComplete = async (r: Reminder) => {
-    const newStatus = !r.completed;
     try {
-      const updated = await api.updateReminder(r._id, { completed: newStatus });
+      const updated = await api.updateReminder(r._id, { completed: !r.completed });
       setReminders((prev) => prev.map((item) => (item._id === r._id ? updated : item)));
     } catch (e) {
       console.warn('Failed to toggle reminder status:', e);
@@ -242,8 +274,9 @@ export const CaregiverDashboard: React.FC = () => {
   };
 
   // Prepare chart data for Recharts
-  const accuracyChartData = gameHistory.slice(-7).map((item, index) => {
-    const d = new Date(item.playedAt);
+  const accuracyChartData = gameHistory.slice(-7).map((item) => {
+    const rawDate = item.completedAt || (item as any).playedAt || Date.now();
+    const d = new Date(rawDate);
     return {
       name: `${d.getMonth() + 1}/${d.getDate()}`,
       accuracy: item.accuracy,
@@ -253,16 +286,22 @@ export const CaregiverDashboard: React.FC = () => {
     };
   });
 
+  const caregiverAvatar = user?.avatar || (user?.gender === 'female' ? DEFAULT_FEMALE_CAREGIVER_AVATAR : DEFAULT_MALE_CAREGIVER_AVATAR);
+  const caregiverGender = user?.gender || 'male';
+  const patientAvatar = patient?.avatar || (patient?.gender === 'male' ? DEFAULT_MALE_PATIENT_AVATAR : DEFAULT_FEMALE_PATIENT_AVATAR);
+  const patientGender = patient?.gender || 'female';
+
   return (
     <div id="caregiver-dashboard" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-      {/* Caregiver Welcome Banner */}
-      <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md">
+      {/* Caregiver Welcome Banner & Profile Command Center */}
+      <div className="bg-gradient-to-r from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-sm border border-indigo-800/80">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div className="space-y-2">
+          {/* Left: Caregiver & Patient Identification */}
+          <div className="space-y-4 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-2 bg-indigo-500/30 px-3.5 py-1 rounded-full text-xs font-bold text-indigo-200 uppercase tracking-wider">
+              <div className="inline-flex items-center gap-2 bg-indigo-500/30 border border-indigo-400/30 px-3.5 py-1 rounded-full text-xs font-black text-indigo-200 uppercase tracking-wider">
                 <UserCheck className="w-4 h-4" />
-                <span>Caregiver Companion Portal</span>
+                <span>{t('caregiverPortal')}</span>
               </div>
               <div className="inline-flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-400/40 px-3 py-1 rounded-full text-xs font-bold text-emerald-200">
                 <Database className="w-3.5 h-3.5 text-emerald-300" />
@@ -274,41 +313,79 @@ export const CaregiverDashboard: React.FC = () => {
                 )}
               </div>
             </div>
-            <h1 id="caregiver-welcome-title" className="text-3xl sm:text-4xl font-black tracking-tight">
-              Monitoring & Care for {patient?.name || 'Eleanor Vance'}
-            </h1>
-            <p className="text-indigo-200 text-sm sm:text-base max-w-2xl">
-              Track cognitive gaming performance, adjust adaptive challenge levels, enrich the memory album, and schedule gentle daily reminders.
-            </p>
 
-            {/* Dynamic Registered Patient Selector */}
-            {allPatients.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2.5 pt-2">
-                <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
-                  Active Patient:
-                </span>
-                <select
-                  id="caregiver-patient-select"
-                  value={selectedPatientId}
-                  onChange={(e) => setSelectedPatientId(e.target.value)}
-                  className="bg-indigo-950/80 border border-indigo-400/40 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-black text-white focus:outline-hidden cursor-pointer"
-                >
-                  {allPatients.map((p) => (
-                    <option key={p._id} value={p._id} className="bg-slate-900 text-white font-normal">
-                      {p.name} ({p.email})
-                    </option>
-                  ))}
-                </select>
+            {/* Profile Bar: Caregiver and Monitored Patient */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-3.5 backdrop-blur-xs">
+              {/* Caregiver Identity */}
+              <div className="flex items-center gap-3 pr-4 border-b sm:border-b-0 sm:border-r border-white/10 pb-3 sm:pb-0">
+                <img
+                  src={caregiverAvatar}
+                  alt={user?.name || 'Caregiver'}
+                  className="w-12 h-12 rounded-xl object-cover ring-2 ring-indigo-400/50 shadow-xs flex-shrink-0"
+                />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Caregiver</span>
+                    <span className="text-[10px] font-black bg-indigo-500/40 text-indigo-200 px-1.5 py-0.5 rounded">
+                      {caregiverGender === 'female' ? '👩 Female' : '👨 Male'}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-black text-white">{user?.name || 'Dr. Marcus Vance'}</h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowProfileModal(true)}
+                    className="text-[11px] text-teal-300 hover:text-teal-200 font-bold flex items-center gap-1 mt-0.5 cursor-pointer"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    <span>Edit Photo & Gender</span>
+                  </button>
+                </div>
               </div>
-            )}
+
+              {/* Patient Identity */}
+              <div className="flex items-center gap-3">
+                <img
+                  src={patientAvatar}
+                  alt={patient?.name || 'Patient'}
+                  className="w-12 h-12 rounded-xl object-cover ring-2 ring-teal-400/50 shadow-xs flex-shrink-0"
+                />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-teal-300 uppercase tracking-wider">{t('activePatient')}</span>
+                    <span className="text-[10px] font-black bg-teal-500/40 text-teal-200 px-1.5 py-0.5 rounded">
+                      {patientGender === 'male' ? '👨 Male' : '👩 Female'}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-black text-white">{patient?.name || 'Eleanor Vance'}</h4>
+                  {allPatients.length > 1 && (
+                    <select
+                      id="caregiver-patient-select"
+                      value={selectedPatientId}
+                      onChange={(e) => setSelectedPatientId(e.target.value)}
+                      className="bg-indigo-950/90 border border-indigo-400/40 rounded-lg px-2 py-0.5 text-[11px] font-bold text-white focus:outline-hidden cursor-pointer mt-0.5"
+                    >
+                      {allPatients.map((p) => (
+                        <option key={p._id} value={p._id} className="bg-slate-900 text-white font-normal">
+                          Switch: {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-indigo-200 text-xs sm:text-sm leading-relaxed">
+              {t('caregiverSubtitle')}
+            </p>
           </div>
 
-          {/* Quick Controls & Adaptive Challenge Selector */}
-          <div className="space-y-3 flex-shrink-0">
-            <div className="bg-white/10 backdrop-blur-sm border border-white/20 p-4 rounded-2xl space-y-2">
+          {/* Right: Quick Controls & Adaptive Challenge Selector */}
+          <div className="space-y-3 flex-shrink-0 w-full lg:w-auto">
+            <div className="bg-white/10 backdrop-blur-xs border border-white/20 p-4 rounded-2xl space-y-2">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">
-                  Adaptive Difficulty:
+                <span className="text-xs font-black text-indigo-200 uppercase tracking-wider">
+                  {t('adaptiveDifficulty')}:
                 </span>
                 {difficultyUpdateMsg && (
                   <span className="text-[11px] font-bold text-emerald-300 animate-pulse">
@@ -328,7 +405,7 @@ export const CaregiverDashboard: React.FC = () => {
                         : 'bg-white/10 hover:bg-white/20 text-indigo-100'
                     }`}
                   >
-                    {diff}
+                    {diff === 'easy' ? t('gentle') : diff === 'medium' ? t('balanced') : t('advanced')}
                   </button>
                 ))}
               </div>
@@ -344,7 +421,7 @@ export const CaregiverDashboard: React.FC = () => {
                 title="Sign Out of Caregiver Account"
               >
                 <LogOut className="w-4 h-4 text-rose-300" />
-                <span>Sign Out</span>
+                <span>{t('signOut')}</span>
               </button>
             </div>
           </div>
@@ -353,113 +430,147 @@ export const CaregiverDashboard: React.FC = () => {
 
       {/* Patient Vital Cards Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center flex-shrink-0">
             <Brain className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-500 uppercase">Memory Score</span>
+            <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wide">{t('memory')}</span>
             <p className="text-2xl font-black text-slate-900">{progress?.memoryScore ?? 92}%</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center flex-shrink-0">
             <Activity className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-500 uppercase">Attention Score</span>
+            <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wide">{t('attention')}</span>
             <p className="text-2xl font-black text-slate-900">{progress?.attentionScore ?? 88}%</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center flex-shrink-0">
             <BookOpen className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-500 uppercase">Family Memories</span>
-            <p className="text-2xl font-black text-slate-900">{memories.length} Saved</p>
+            <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wide">{t('recall')}</span>
+            <p className="text-2xl font-black text-slate-900">{progress?.recallScore ?? 85}%</p>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0">
             <Bell className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-500 uppercase">Today's Reminders</span>
+            <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wide">{t('myReminders')}</span>
             <p className="text-2xl font-black text-slate-900">{reminders.length} Active</p>
           </div>
         </div>
       </div>
 
       {/* Main Caregiver Navigation Tabs */}
-      <div className="flex border-b border-slate-200 gap-4 sm:gap-6 overflow-x-auto">
+      <div className="flex border-b border-slate-200 gap-3 sm:gap-6 overflow-x-auto pb-1">
+        {/* Tab 1: Clinical Performance Report */}
+        <button
+          id="tab-clinical-report"
+          onClick={() => setActiveTab('clinical-report')}
+          className={`pb-3 text-sm sm:text-base font-black flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+            activeTab === 'clinical-report'
+              ? 'border-indigo-600 text-indigo-950'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Sparkles className="w-5 h-5 text-indigo-600" />
+          <span>{t('clinicalPerformanceReport')}</span>
+          <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full hidden sm:inline">
+            AI Evaluated
+          </span>
+        </button>
+
+        {/* Tab 2: Analytics & Trends */}
         <button
           id="tab-analytics"
           onClick={() => setActiveTab('analytics')}
-          className={`pb-3 text-sm sm:text-base font-extrabold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+          className={`pb-3 text-sm sm:text-base font-black flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
             activeTab === 'analytics'
-              ? 'border-indigo-600 text-indigo-900'
+              ? 'border-indigo-600 text-indigo-950'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <BarChart3 className="w-5 h-5" />
-          <span>Game Analytics & Trends</span>
+          <BarChart3 className="w-5 h-5 text-teal-600" />
+          <span>{t('gameAnalyticsTrends')}</span>
         </button>
 
+        {/* Tab 3: Memory Book */}
         <button
           id="tab-memories"
           onClick={() => setActiveTab('memories')}
-          className={`pb-3 text-sm sm:text-base font-extrabold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+          className={`pb-3 text-sm sm:text-base font-black flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
             activeTab === 'memories'
-              ? 'border-indigo-600 text-indigo-900'
+              ? 'border-indigo-600 text-indigo-950'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <BookOpen className="w-5 h-5" />
-          <span>Memory Book ({memories.length})</span>
+          <BookOpen className="w-5 h-5 text-blue-600" />
+          <span>{t('memoryBook')} ({memories.length})</span>
         </button>
 
+        {/* Tab 4: Schedule & Reminders */}
         <button
           id="tab-reminders"
           onClick={() => setActiveTab('reminders')}
-          className={`pb-3 text-sm sm:text-base font-extrabold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+          className={`pb-3 text-sm sm:text-base font-black flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
             activeTab === 'reminders'
-              ? 'border-indigo-600 text-indigo-900'
+              ? 'border-indigo-600 text-indigo-950'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <Bell className="w-5 h-5" />
-          <span>Schedule & Reminders ({reminders.length})</span>
+          <Bell className="w-5 h-5 text-amber-600" />
+          <span>{t('scheduleReminders')} ({reminders.length})</span>
         </button>
 
+        {/* Tab 5: AI Care Insights */}
         <button
           id="tab-ai-insights"
           onClick={() => setActiveTab('ai-insights')}
-          className={`pb-3 text-sm sm:text-base font-extrabold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+          className={`pb-3 text-sm sm:text-base font-black flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
             activeTab === 'ai-insights'
-              ? 'border-indigo-600 text-indigo-900'
+              ? 'border-indigo-600 text-indigo-950'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <Sparkles className="w-5 h-5 text-purple-600" />
-          <span>Care Insights & AI Summary</span>
+          <FileText className="w-5 h-5 text-purple-600" />
+          <span>{t('careInsightsAISummary')}</span>
         </button>
       </div>
 
-      {/* TAB 1: ANALYTICS & CHARTS */}
+      {/* TAB 1: CLINICAL PERFORMANCE REPORT (Neat, Beautiful, Detailed Patient Analysis) */}
+      {activeTab === 'clinical-report' && (
+        <PatientPerformanceAnalysis
+          patientName={patient?.name || 'Eleanor Vance'}
+          patient={patient}
+          progress={progress}
+          gameHistory={gameHistory}
+          report={report}
+          onRefreshReport={() => loadReportData(pId)}
+          isLoadingReport={isLoadingReport}
+        />
+      )}
+
+      {/* TAB 2: ANALYTICS & CHARTS */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Accuracy Trend Chart */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
               <div>
-                <h3 className="font-extrabold text-lg text-slate-900">Accuracy & Score Trends (%)</h3>
-                <p className="text-xs text-slate-500">Recent cognitive exercise performance trajectory</p>
+                <h3 className="font-black text-lg text-slate-900">{t('accuracyProgressTrend')}</h3>
+                <p className="text-xs text-slate-500 font-medium">Recent cognitive exercise performance trajectory</p>
               </div>
-              <div className="h-64 w-full">
+              <div className="h-64 w-full pt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={accuracyChartData}>
                     <defs>
@@ -479,12 +590,12 @@ export const CaregiverDashboard: React.FC = () => {
             </div>
 
             {/* Response Time Chart */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
               <div>
-                <h3 className="font-extrabold text-lg text-slate-900">Exercise Duration / Response Time (s)</h3>
-                <p className="text-xs text-slate-500">Seconds to complete each cognitive session</p>
+                <h3 className="font-black text-lg text-slate-900">{t('responseTimeBySession')}</h3>
+                <p className="text-xs text-slate-500 font-medium">Seconds to complete each cognitive session</p>
               </div>
-              <div className="h-64 w-full">
+              <div className="h-64 w-full pt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={accuracyChartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -499,41 +610,44 @@ export const CaregiverDashboard: React.FC = () => {
           </div>
 
           {/* Recent Game History Table */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
-            <h3 className="font-extrabold text-lg text-slate-900">Recent Session Log</h3>
+          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-4">
+            <h3 className="font-black text-lg text-slate-900">{t('recentSessionLog')}</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 text-xs font-bold uppercase">
-                    <th className="pb-3">Date</th>
-                    <th className="pb-3">Game Type</th>
-                    <th className="pb-3">Difficulty</th>
-                    <th className="pb-3">Score</th>
-                    <th className="pb-3">Accuracy</th>
-                    <th className="pb-3">Response Time</th>
-                    <th className="pb-3">Mistakes</th>
+                  <tr className="border-b border-slate-200 text-slate-500 text-xs font-black uppercase tracking-wider">
+                    <th className="pb-3">{t('dateTime')}</th>
+                    <th className="pb-3">{t('cognitiveGame')}</th>
+                    <th className="pb-3">{t('difficulty')}</th>
+                    <th className="pb-3">{t('score')}</th>
+                    <th className="pb-3">{t('accuracy')}</th>
+                    <th className="pb-3">{t('responseTime')}</th>
+                    <th className="pb-3">{t('mistakes')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {gameHistory.slice(0, 8).map((g) => (
-                    <tr key={g._id} className="hover:bg-slate-50/80">
-                      <td className="py-3 text-slate-600 font-medium">
-                        {new Date(g.playedAt).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 font-bold text-slate-900 capitalize">
-                        {g.gameType.replace('-', ' ')}
-                      </td>
-                      <td className="py-3">
-                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 capitalize">
-                          {g.difficulty}
-                        </span>
-                      </td>
-                      <td className="py-3 font-extrabold text-teal-700">{g.score}</td>
-                      <td className="py-3 font-bold text-slate-800">{g.accuracy}%</td>
-                      <td className="py-3 text-slate-600">{Math.round(g.responseTimeMs / 1000)}s</td>
-                      <td className="py-3 text-slate-600">{g.mistakes}</td>
-                    </tr>
-                  ))}
+                  {gameHistory.slice(0, 8).map((g) => {
+                    const rawDate = g.completedAt || (g as any).playedAt || Date.now();
+                    return (
+                      <tr key={g._id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 text-slate-600 font-medium whitespace-nowrap">
+                          {new Date(rawDate).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 font-bold text-slate-900 capitalize whitespace-nowrap">
+                          {g.gameType.replace('-', ' ')}
+                        </td>
+                        <td className="py-3">
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-slate-100 text-slate-700 capitalize">
+                            {g.difficulty}
+                          </span>
+                        </td>
+                        <td className="py-3 font-black text-teal-700">{g.score}</td>
+                        <td className="py-3 font-bold text-slate-800">{g.accuracy}%</td>
+                        <td className="py-3 text-slate-600">{Math.round(g.responseTimeMs / 1000)}s</td>
+                        <td className="py-3 text-slate-600 font-medium">{g.mistakes}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -541,23 +655,23 @@ export const CaregiverDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: MEMORY MANAGEMENT */}
+      {/* TAB 3: MEMORY MANAGEMENT */}
       {activeTab === 'memories' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="font-extrabold text-2xl text-slate-900">Patient Memory Book</h3>
-              <p className="text-slate-600 text-sm">
-                Add photos and stories to support Eleanor's memory retrieval and comfort.
+              <h3 className="font-black text-2xl text-slate-900">{t('patientMemoryBook')}</h3>
+              <p className="text-slate-600 text-sm font-medium">
+                {t('memoryBookSubtitle')}
               </p>
             </div>
             <button
               id="add-memory-btn"
               onClick={() => setShowAddMemoryModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-2xl shadow-sm cursor-pointer transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-black rounded-2xl shadow-xs cursor-pointer transition-colors"
             >
               <Plus className="w-5 h-5" />
-              <span>Add New Memory</span>
+              <span>{t('addMemory')}</span>
             </button>
           </div>
 
@@ -565,22 +679,22 @@ export const CaregiverDashboard: React.FC = () => {
             {memories.map((m) => (
               <div
                 key={m._id}
-                className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs flex flex-col justify-between"
+                className="bg-white rounded-3xl border border-slate-200/90 overflow-hidden shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow"
               >
                 <div>
                   <img src={m.photoUrl} alt={m.title} className="w-full h-48 object-cover" />
                   <div className="p-5 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                      <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800">
                         {m.relationship}
                       </span>
-                      <span className="text-xs text-slate-400">{m.dateEra}</span>
+                      <span className="text-xs text-slate-400 font-bold">{m.dateEra}</span>
                     </div>
-                    <h4 className="font-extrabold text-xl text-slate-900">{m.title}</h4>
+                    <h4 className="font-black text-xl text-slate-900">{m.title}</h4>
                     {m.personName && (
-                      <p className="text-xs font-bold text-teal-700">Person: {m.personName}</p>
+                      <p className="text-xs font-extrabold text-teal-700">Person: {m.personName}</p>
                     )}
-                    <p className="text-slate-600 text-sm line-clamp-3">{m.description}</p>
+                    <p className="text-slate-600 text-sm line-clamp-3 font-medium">{m.description}</p>
                   </div>
                 </div>
 
@@ -588,7 +702,7 @@ export const CaregiverDashboard: React.FC = () => {
                   <button
                     onClick={() => handleDeleteMemory(m._id)}
                     className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                    title="Delete Memory"
+                    title={t('delete')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -599,13 +713,13 @@ export const CaregiverDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: REMINDERS & TASK SCHEDULE */}
+      {/* TAB 4: REMINDERS & TASK SCHEDULE */}
       {activeTab === 'reminders' && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="font-extrabold text-2xl text-slate-900">Patient Schedule & Task Reminders</h3>
-              <p className="text-slate-600 text-sm">
+              <h3 className="font-black text-2xl text-slate-900">{t('scheduleReminders')}</h3>
+              <p className="text-slate-600 text-sm font-medium">
                 Schedule medications, hydration, daily tasks, walks, and calls. Each reminder alerts with our default calming song.
               </p>
             </div>
@@ -628,12 +742,12 @@ export const CaregiverDashboard: React.FC = () => {
                 {isSongPlaying ? (
                   <>
                     <Square className="w-3.5 h-3.5 fill-current" />
-                    <span>Stop Song</span>
+                    <span>{t('stopMelody')}</span>
                   </>
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Test Reminder Melody 🎵</span>
+                    <span>{t('testReminderMelody')}</span>
                   </>
                 )}
               </button>
@@ -641,47 +755,58 @@ export const CaregiverDashboard: React.FC = () => {
               <button
                 id="add-reminder-btn"
                 onClick={() => setShowAddReminderModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-2xl shadow-sm cursor-pointer transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-black rounded-2xl shadow-xs cursor-pointer transition-colors"
               >
                 <Plus className="w-5 h-5" />
-                <span>Add Task / Reminder</span>
+                <span>{t('addTaskReminder')}</span>
               </button>
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200 divide-y divide-slate-100 overflow-hidden shadow-xs">
+          <div className="bg-white rounded-3xl border border-slate-200/90 divide-y divide-slate-100 overflow-hidden shadow-xs">
             {reminders.map((r) => (
               <div key={r._id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase">
+                    <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 uppercase">
                       {r.time}
                     </span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 capitalize">
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 capitalize">
                       {r.category}
                     </span>
                     {r.priority === 'urgent' && (
                       <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-600 text-white uppercase">
-                        Urgent
+                        {t('urgent')}
                       </span>
                     )}
                     {r.soundEnabled !== false && (
-                      <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Music className="w-3 h-3 text-amber-600" />
-                        <span>Melody Song</span>
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1 capitalize">
+                          <Music className="w-3 h-3 text-amber-600" />
+                          <span>{r.soundTune ? r.soundTune.replace('-', ' ') : t('melodySong')}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => reminderAudio.previewTune(r.soundTune || 'morning-bells')}
+                          className="px-2 py-0.5 rounded-lg bg-amber-100/70 hover:bg-amber-200 text-amber-900 text-[10px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Preview reminder melody"
+                        >
+                          <Play className="w-2.5 h-2.5 fill-current" />
+                          <span>Preview</span>
+                        </button>
+                      </div>
                     )}
                     {r.completed && (
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        ✓ Completed
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                        ✓ {t('markDone')}
                       </span>
                     )}
                   </div>
-                  <h4 className={`font-extrabold text-lg text-slate-900 ${r.completed ? 'line-through text-slate-400' : ''}`}>
+                  <h4 className={`font-black text-lg text-slate-900 ${r.completed ? 'line-through text-slate-400' : ''}`}>
                     {r.title}
                   </h4>
                   {(r.description || r.notes) && (
-                    <p className="text-sm text-slate-600">{r.description || r.notes}</p>
+                    <p className="text-sm text-slate-600 font-medium">{r.description || r.notes}</p>
                   )}
                 </div>
 
@@ -695,13 +820,13 @@ export const CaregiverDashboard: React.FC = () => {
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
-                    {r.completed ? 'Mark Incomplete' : 'Mark Done'}
+                    {r.completed ? t('markIncomplete') : t('markDone')}
                   </button>
 
                   <button
                     onClick={() => handleDeleteReminder(r._id)}
                     className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                    title="Delete Reminder"
+                    title={t('delete')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -710,49 +835,49 @@ export const CaregiverDashboard: React.FC = () => {
             ))}
 
             {reminders.length === 0 && (
-              <div className="p-8 text-center text-slate-500">
-                No tasks or reminders scheduled for this patient. Click "Add Task / Reminder" above to get started.
+              <div className="p-8 text-center text-slate-500 font-medium">
+                {t('noRemindersScheduled')}
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* TAB 4: AI CAREGIVER INSIGHTS */}
+      {/* TAB 5: AI CAREGIVER INSIGHTS */}
       {activeTab === 'ai-insights' && (
         <div className="space-y-6">
-          <div className="bg-purple-50 border border-purple-200 rounded-3xl p-6 sm:p-8 space-y-4">
+          <div className="bg-purple-50 border border-purple-200/90 rounded-3xl p-6 sm:p-8 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-purple-700 text-white flex items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-purple-700 text-white flex items-center justify-center shadow-xs flex-shrink-0">
                 <Sparkles className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-extrabold text-2xl text-purple-950">AI Cognitive Care Insights</h3>
-                <p className="text-sm text-purple-800">
+                <h3 className="font-black text-2xl text-purple-950">{t('careInsightsAISummary')}</h3>
+                <p className="text-sm text-purple-800 font-medium">
                   Automated weekly activity analysis based on game engagement and routine completion.
                 </p>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-purple-200 space-y-4 text-slate-800">
+            <div className="bg-white p-6 rounded-2xl border border-purple-200/80 space-y-4 text-slate-800 shadow-2xs">
               <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
                 <CheckCircle className="w-5 h-5" />
                 <span>Positive Engagement Trend Detected</span>
               </div>
-              <p className="leading-relaxed text-slate-700">
-                Over the last 7 sessions, Eleanor demonstrated steady accuracy in visual memory match (average 92%) with an average response time of 32 seconds. Working memory exercises (Number Recall) are responding well at the Gentle challenge level.
+              <p className="leading-relaxed text-slate-700 font-medium">
+                Over recent sessions, {patient?.name || 'Eleanor'} demonstrated steady accuracy in visual memory match (average 92%) with an average response time of 3.2 seconds. Working memory exercises are responding well at the current adaptive challenge level.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <h5 className="font-extrabold text-sm text-slate-900">Recommended Activities</h5>
-                  <p className="text-xs text-slate-600 mt-1">
+                  <h5 className="font-black text-sm text-slate-900">Recommended Activities</h5>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">
                     Introduce 1-2 Picture Recall sessions in the morning after breakfast when focus is highest.
                   </p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <h5 className="font-extrabold text-sm text-slate-900">Routine Adherence</h5>
-                  <p className="text-xs text-slate-600 mt-1">
-                    Morning hydration and vitamin reminders were marked complete 6 out of 7 days this week.
+                  <h5 className="font-black text-sm text-slate-900">Routine Adherence</h5>
+                  <p className="text-xs text-slate-600 mt-1 font-medium">
+                    Morning hydration and vitamin reminders were marked complete with consistent adherence.
                   </p>
                 </div>
               </div>
@@ -769,7 +894,7 @@ export const CaregiverDashboard: React.FC = () => {
       {showAddMemoryModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl">
-            <h3 className="font-black text-2xl text-slate-900">Add New Personal Memory</h3>
+            <h3 className="font-black text-2xl text-slate-900">{t('addMemory')}</h3>
             <form onSubmit={handleCreateMemory} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Title</label>
@@ -835,13 +960,13 @@ export const CaregiverDashboard: React.FC = () => {
                   onClick={() => setShowAddMemoryModal(false)}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm cursor-pointer"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-sm cursor-pointer"
+                  className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-black rounded-xl text-sm cursor-pointer"
                 >
-                  Save Memory
+                  {t('saveMemory')}
                 </button>
               </div>
             </form>
@@ -855,8 +980,8 @@ export const CaregiverDashboard: React.FC = () => {
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-black text-2xl text-slate-900">Add Task or Reminder</h3>
-                <p className="text-xs text-slate-500">Scheduled for {patient?.name || 'your loved one'}</p>
+                <h3 className="font-black text-2xl text-slate-900">{t('addTaskReminder')}</h3>
+                <p className="text-xs text-slate-500 font-medium">Scheduled for {patient?.name || 'your loved one'}</p>
               </div>
               <span className="p-2.5 rounded-2xl bg-amber-100 text-amber-800">
                 <Bell className="w-6 h-6" />
@@ -917,7 +1042,7 @@ export const CaregiverDashboard: React.FC = () => {
                   >
                     <option value="normal">Normal</option>
                     <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
+                    <option value="urgent">{t('urgent')}</option>
                   </select>
                 </div>
 
@@ -961,7 +1086,7 @@ export const CaregiverDashboard: React.FC = () => {
                       <span className="text-sm font-black text-slate-900 block">
                         Play Default Melody Song on Alarm 🔔
                       </span>
-                      <span className="text-xs text-slate-600">
+                      <span className="text-xs text-slate-600 font-medium">
                         Plays a comforting, senior-friendly song designed to notify without startling.
                       </span>
                     </div>
@@ -987,12 +1112,12 @@ export const CaregiverDashboard: React.FC = () => {
                     {isSongPlaying ? (
                       <>
                         <Square className="w-3.5 h-3.5 fill-current" />
-                        <span>Stop Melody</span>
+                        <span>{t('stopMelody')}</span>
                       </>
                     ) : (
                       <>
                         <Play className="w-3.5 h-3.5 fill-current" />
-                        <span>Preview Melody Song 🎵</span>
+                        <span>{t('testReminderMelody')}</span>
                       </>
                     )}
                   </button>
@@ -1005,11 +1130,11 @@ export const CaregiverDashboard: React.FC = () => {
                   onClick={() => setShowAddReminderModal(false)}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm cursor-pointer"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl text-sm cursor-pointer shadow-xs"
+                  className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-black rounded-xl text-sm cursor-pointer shadow-xs"
                 >
                   Save Schedule Task
                 </button>
@@ -1025,6 +1150,13 @@ export const CaregiverDashboard: React.FC = () => {
         onClose={() => setShowSignOutConfirm(false)}
         onConfirm={logout}
         userName={user?.name}
+      />
+
+      {/* Caregiver Profile & Gender Customization Modal */}
+      <AuthModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        initialMode="login"
       />
     </div>
   );

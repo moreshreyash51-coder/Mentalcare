@@ -23,6 +23,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
+import {
+  AVATAR_PRESETS,
+  DEFAULT_FEMALE_PATIENT_AVATAR,
+  DEFAULT_MALE_PATIENT_AVATAR,
+  DEFAULT_FEMALE_CAREGIVER_AVATAR,
+  DEFAULT_MALE_CAREGIVER_AVATAR,
+} from '../../types';
 
 export const AuthLandingView: React.FC = () => {
   const { login, register } = useAuth();
@@ -44,6 +51,8 @@ export const AuthLandingView: React.FC = () => {
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
   const [regRole, setRegRole] = useState<'patient' | 'caregiver'>('patient');
+  const [regGender, setRegGender] = useState<'female' | 'male'>('female');
+  const [regAvatar, setRegAvatar] = useState<string>(DEFAULT_FEMALE_PATIENT_AVATAR);
   const [regEmergencyName, setRegEmergencyName] = useState('');
   const [regEmergencyPhone, setRegEmergencyPhone] = useState('');
   const [regEmergencyRelation, setRegEmergencyRelation] = useState('');
@@ -164,6 +173,8 @@ export const AuthLandingView: React.FC = () => {
         email: cleanEmail,
         password: regPassword,
         role: regRole,
+        gender: regGender,
+        avatar: regAvatar || (regGender === 'male' ? DEFAULT_MALE_PATIENT_AVATAR : DEFAULT_FEMALE_PATIENT_AVATAR),
         emergencyContact: regEmergencyName
           ? {
               name: regEmergencyName,
@@ -526,10 +537,115 @@ export const AuthLandingView: React.FC = () => {
               </div>
             </div>
 
+            {/* Gender and Profile Photo Selection */}
+            <div className="bg-slate-50 border-2 border-slate-200 rounded-3xl p-5 sm:p-6 space-y-4">
+              <div>
+                <label className="block text-base font-extrabold text-slate-800 mb-1">
+                  2. Gender & Profile Photo
+                </label>
+                <p className="text-xs sm:text-sm text-slate-600">
+                  Select gender to automatically set your profile photo, or tap any photo below to customize.
+                </p>
+              </div>
+
+              {/* Female vs Male Toggle */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  id="reg-gender-female-btn"
+                  type="button"
+                  onClick={() => {
+                    setRegGender('female');
+                    setRegAvatar(
+                      regRole === 'caregiver'
+                        ? DEFAULT_FEMALE_CAREGIVER_AVATAR
+                        : DEFAULT_FEMALE_PATIENT_AVATAR
+                    );
+                    speakText('Selected Female. Profile photo updated.');
+                  }}
+                  className={`py-3.5 px-4 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer border-2 ${
+                    regGender === 'female'
+                      ? 'bg-rose-50 border-rose-500 text-rose-900 ring-2 ring-rose-300'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="text-xl">👩</span>
+                  <span>Female</span>
+                  {regGender === 'female' && <CheckCircle2 className="w-4 h-4 text-rose-600" />}
+                </button>
+
+                <button
+                  id="reg-gender-male-btn"
+                  type="button"
+                  onClick={() => {
+                    setRegGender('male');
+                    setRegAvatar(
+                      regRole === 'caregiver'
+                        ? DEFAULT_MALE_CAREGIVER_AVATAR
+                        : DEFAULT_MALE_PATIENT_AVATAR
+                    );
+                    speakText('Selected Male. Profile photo updated.');
+                  }}
+                  className={`py-3.5 px-4 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer border-2 ${
+                    regGender === 'male'
+                      ? 'bg-blue-50 border-blue-500 text-blue-900 ring-2 ring-blue-300'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="text-xl">👨</span>
+                  <span>Male</span>
+                  {regGender === 'male' && <CheckCircle2 className="w-4 h-4 text-blue-600" />}
+                </button>
+              </div>
+
+              {/* Photo Avatars Preview & Choice */}
+              <div>
+                <span className="text-xs font-bold text-slate-600 block mb-2">
+                  Choose Photo Portrait:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {AVATAR_PRESETS.filter((p) => p.gender === regGender).map((preset) => {
+                    const isSelected = regAvatar === preset.url;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setRegAvatar(preset.url);
+                          speakText(`Selected photo: ${preset.name}`);
+                        }}
+                        className={`p-2 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'bg-white border-teal-600 shadow-md ring-2 ring-teal-400'
+                            : 'bg-white/70 border-slate-200 hover:bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="relative">
+                          <img
+                            src={preset.url}
+                            alt={preset.name}
+                            referrerPolicy="no-referrer"
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-xs"
+                          />
+                          {isSelected && (
+                            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                              <Check className="w-3 h-3" />
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-800 line-clamp-1">
+                          {preset.name.split('(')[0].trim()}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             {/* Full Name */}
             <div>
               <label htmlFor="reg-name-input" className="block text-base font-extrabold text-slate-800 mb-2">
-                2. Full Name
+                3. Full Name
               </label>
               <div className="relative">
                 <User className="w-5 h-5 text-slate-400 absolute left-4 top-4 pointer-events-none" />
@@ -549,7 +665,7 @@ export const AuthLandingView: React.FC = () => {
             {/* Email Address */}
             <div>
               <label htmlFor="reg-email-input" className="block text-base font-extrabold text-slate-800 mb-2">
-                3. Email Address
+                4. Email Address
               </label>
               <div className="relative">
                 <Mail className="w-5 h-5 text-slate-400 absolute left-4 top-4 pointer-events-none" />
@@ -571,7 +687,7 @@ export const AuthLandingView: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label htmlFor="reg-password-input" className="block text-base font-extrabold text-slate-800">
-                    4. Password
+                    5. Password
                   </label>
                   <button
                     type="button"
@@ -652,7 +768,7 @@ export const AuthLandingView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <PhoneCall className="w-4 h-4 text-teal-700" />
                 <span className="text-sm font-black text-slate-800">
-                  5. Support & Emergency Contact (Optional)
+                  6. Support & Emergency Contact (Optional)
                 </span>
               </div>
               <p className="text-xs text-slate-500">

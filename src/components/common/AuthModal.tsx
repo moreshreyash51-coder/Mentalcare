@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { DatabaseStatus } from '../../types';
+import { DatabaseStatus, AVATAR_PRESETS, DEFAULT_FEMALE_PATIENT_AVATAR, DEFAULT_MALE_PATIENT_AVATAR, DEFAULT_FEMALE_CAREGIVER_AVATAR, DEFAULT_MALE_CAREGIVER_AVATAR } from '../../types';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -26,7 +26,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { user, login, register, logout } = useAuth();
+  const { user, login, register, logout, updateUser } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -34,6 +34,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [role, setRole] = useState<'patient' | 'caregiver'>('patient');
+  const [selectedGender, setSelectedGender] = useState<'female' | 'male'>('female');
+  const [selectedAvatar, setSelectedAvatar] = useState<string>('');
+  const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+  const [avatarSuccessMsg, setAvatarSuccessMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<DatabaseStatus | null>(null);
@@ -41,12 +45,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) {
       setError(null);
+      setAvatarSuccessMsg(null);
+      if (user) {
+        setSelectedGender((user.gender as 'female' | 'male') || 'female');
+        setSelectedAvatar(user.avatar || '');
+      }
       api
         .getDatabaseStatus()
         .then(setDbStatus)
         .catch((e) => console.warn('Could not fetch DB status:', e));
     }
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -63,6 +72,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           name,
           email,
           role,
+          gender: selectedGender,
+          avatar: selectedAvatar || (selectedGender === 'male' ? DEFAULT_MALE_PATIENT_AVATAR : DEFAULT_FEMALE_PATIENT_AVATAR),
           password,
           language: 'en',
           cognitiveDifficulty: 'easy',
@@ -80,6 +91,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       setError(err.message || 'Authentication error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveAvatarGender = async (gender: 'female' | 'male', avatarUrl: string) => {
+    setIsUpdatingAvatar(true);
+    setAvatarSuccessMsg(null);
+    try {
+      const res = await api.updateProfile({ gender, avatar: avatarUrl });
+      updateUser(res.user);
+      setSelectedGender(gender);
+      setSelectedAvatar(avatarUrl);
+      setAvatarSuccessMsg('Profile photo & gender updated successfully!');
+      setTimeout(() => setAvatarSuccessMsg(null), 3500);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile');
+    } finally {
+      setIsUpdatingAvatar(false);
     }
   };
 
@@ -207,6 +235,89 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 <span className="font-semibold text-teal-700">
                   Status: Active & Synced to Database
                 </span>
+              </div>
+
+              {/* Gender and Profile Photo Selection */}
+              <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-800">
+                    Profile Photo & Gender:
+                  </span>
+                  {avatarSuccessMsg && (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      {avatarSuccessMsg}
+                    </span>
+                  )}
+                </div>
+
+                {/* Gender toggle buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isUpdatingAvatar}
+                    onClick={() => {
+                      const newGender = 'female';
+                      const defaultAvatar = user?.role === 'caregiver' ? DEFAULT_FEMALE_CAREGIVER_AVATAR : DEFAULT_FEMALE_PATIENT_AVATAR;
+                      handleSaveAvatarGender(newGender, defaultAvatar);
+                    }}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      selectedGender === 'female'
+                        ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-200'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>👩 Female Photo</span>
+                    {selectedGender === 'female' && <CheckCircle2 className="w-3.5 h-3.5 text-rose-600" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isUpdatingAvatar}
+                    onClick={() => {
+                      const newGender = 'male';
+                      const defaultAvatar = user?.role === 'caregiver' ? DEFAULT_MALE_CAREGIVER_AVATAR : DEFAULT_MALE_PATIENT_AVATAR;
+                      handleSaveAvatarGender(newGender, defaultAvatar);
+                    }}
+                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      selectedGender === 'male'
+                        ? 'bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-200'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>👨 Male Photo</span>
+                    {selectedGender === 'male' && <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />}
+                  </button>
+                </div>
+
+                {/* Photo choices for selected gender */}
+                <div className="grid grid-cols-4 gap-2 pt-1">
+                  {AVATAR_PRESETS.filter((p) => p.gender === selectedGender).map((preset) => {
+                    const isSelected = selectedAvatar === preset.url || user?.avatar === preset.url;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        disabled={isUpdatingAvatar}
+                        onClick={() => handleSaveAvatarGender(selectedGender, preset.url)}
+                        className={`p-1.5 rounded-xl border-2 transition-all flex flex-col items-center gap-1 cursor-pointer ${
+                          isSelected
+                            ? 'bg-teal-50 border-teal-600 ring-1 ring-teal-500 shadow-2xs'
+                            : 'bg-slate-50 border-slate-200 hover:bg-white'
+                        }`}
+                        title={preset.name}
+                      >
+                        <img
+                          src={preset.url}
+                          alt={preset.name}
+                          className="w-10 h-10 rounded-lg object-cover"
+                        />
+                        <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center">
+                          {preset.name.split('(')[0].trim()}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ) : (

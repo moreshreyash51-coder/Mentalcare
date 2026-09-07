@@ -135,6 +135,13 @@ class ReminderAudioEngine {
    * to catch seniors' attention comfortably without any jarring alarm sounds.
    */
   public playDefaultReminderSong(loop = false): void {
+    this.playTune('morning-bells', loop);
+  }
+
+  /**
+   * Play any of the available rich reminder songs by tuneId
+   */
+  public playTune(tuneId = 'morning-bells', loop = false): void {
     if (this.muted) return;
     this.stop();
 
@@ -145,22 +152,87 @@ class ReminderAudioEngine {
     this.isLooping = loop;
     this.notify();
 
-    // Reassuring melody notes: frequency (Hz) and relative step duration (seconds)
-    // Notes: E4, G4, C5, B4, A4, G4, E4, F4, G4, E4, D4, C4
-    const notes = [
-      { freq: 329.63, dur: 0.38, gap: 0.42 }, // E4
-      { freq: 392.00, dur: 0.38, gap: 0.42 }, // G4
-      { freq: 523.25, dur: 0.65, gap: 0.70 }, // C5
-      { freq: 493.88, dur: 0.38, gap: 0.42 }, // B4
-      { freq: 440.00, dur: 0.38, gap: 0.42 }, // A4
-      { freq: 392.00, dur: 0.68, gap: 0.75 }, // G4
-      { freq: 329.63, dur: 0.38, gap: 0.42 }, // E4
-      { freq: 349.23, dur: 0.38, gap: 0.42 }, // F4
-      { freq: 392.00, dur: 0.55, gap: 0.60 }, // G4
-      { freq: 329.63, dur: 0.38, gap: 0.42 }, // E4
-      { freq: 293.66, dur: 0.45, gap: 0.50 }, // D4
-      { freq: 261.63, dur: 1.20, gap: 1.30 }, // C4 (warm resolving tone)
-    ];
+    let notes: Array<{ freq: number; dur: number; gap: number }> = [];
+
+    switch (tuneId) {
+      case 'calm-forest':
+        // Pentatonic peaceful forest melody: D4, F#4, A4, B4, D5, B4, A4, F#4, E4, D4
+        notes = [
+          { freq: 293.66, dur: 0.45, gap: 0.48 }, // D4
+          { freq: 369.99, dur: 0.45, gap: 0.48 }, // F#4
+          { freq: 440.00, dur: 0.65, gap: 0.70 }, // A4
+          { freq: 493.88, dur: 0.45, gap: 0.48 }, // B4
+          { freq: 587.33, dur: 0.85, gap: 0.90 }, // D5
+          { freq: 493.88, dur: 0.45, gap: 0.48 }, // B4
+          { freq: 440.00, dur: 0.55, gap: 0.60 }, // A4
+          { freq: 369.99, dur: 0.45, gap: 0.48 }, // F#4
+          { freq: 329.63, dur: 0.55, gap: 0.60 }, // E4
+          { freq: 293.66, dur: 1.40, gap: 1.50 }, // D4
+        ];
+        break;
+
+      case 'sunshine-tune':
+        // Cheerful uplifting G-major sunshine melody: G4, B4, D5, E5, D5, B4, G4, A4, B4, G4
+        notes = [
+          { freq: 392.00, dur: 0.35, gap: 0.38 }, // G4
+          { freq: 493.88, dur: 0.35, gap: 0.38 }, // B4
+          { freq: 587.33, dur: 0.55, gap: 0.60 }, // D5
+          { freq: 659.25, dur: 0.65, gap: 0.70 }, // E5
+          { freq: 587.33, dur: 0.40, gap: 0.42 }, // D5
+          { freq: 493.88, dur: 0.40, gap: 0.42 }, // B4
+          { freq: 392.00, dur: 0.55, gap: 0.60 }, // G4
+          { freq: 440.00, dur: 0.35, gap: 0.38 }, // A4
+          { freq: 493.88, dur: 0.45, gap: 0.50 }, // B4
+          { freq: 392.00, dur: 1.30, gap: 1.40 }, // G4
+        ];
+        break;
+
+      case 'temple-chimes':
+        // Deep meditative singing chimes: Low D3, A3, D4, F#4, A4, high D5 with long resonance
+        notes = [
+          { freq: 146.83, dur: 1.80, gap: 0.80 }, // D3 deep bell
+          { freq: 220.00, dur: 1.60, gap: 0.70 }, // A3
+          { freq: 293.66, dur: 1.50, gap: 0.70 }, // D4
+          { freq: 369.99, dur: 1.40, gap: 0.70 }, // F#4
+          { freq: 440.00, dur: 1.60, gap: 0.80 }, // A4
+          { freq: 587.33, dur: 2.20, gap: 1.80 }, // D5 bell chime
+        ];
+        break;
+
+      case 'gentle-harmony':
+        // Warm classical afternoon harmony: C4, E4, G4, A4, G4, F4, E4, D4, C4
+        notes = [
+          { freq: 261.63, dur: 0.40, gap: 0.44 }, // C4
+          { freq: 329.63, dur: 0.40, gap: 0.44 }, // E4
+          { freq: 392.00, dur: 0.60, gap: 0.65 }, // G4
+          { freq: 440.00, dur: 0.50, gap: 0.55 }, // A4
+          { freq: 392.00, dur: 0.45, gap: 0.50 }, // G4
+          { freq: 349.23, dur: 0.45, gap: 0.50 }, // F4
+          { freq: 329.63, dur: 0.45, gap: 0.50 }, // E4
+          { freq: 293.66, dur: 0.55, gap: 0.60 }, // D4
+          { freq: 261.63, dur: 1.35, gap: 1.45 }, // C4
+        ];
+        break;
+
+      case 'morning-bells':
+      default:
+        // Warm reassuring morning lullaby
+        notes = [
+          { freq: 329.63, dur: 0.38, gap: 0.42 }, // E4
+          { freq: 392.00, dur: 0.38, gap: 0.42 }, // G4
+          { freq: 523.25, dur: 0.65, gap: 0.70 }, // C5
+          { freq: 493.88, dur: 0.38, gap: 0.42 }, // B4
+          { freq: 440.00, dur: 0.38, gap: 0.42 }, // A4
+          { freq: 392.00, dur: 0.68, gap: 0.75 }, // G4
+          { freq: 329.63, dur: 0.38, gap: 0.42 }, // E4
+          { freq: 349.23, dur: 0.38, gap: 0.42 }, // F4
+          { freq: 392.00, dur: 0.55, gap: 0.60 }, // G4
+          { freq: 329.63, dur: 0.38, gap: 0.42 }, // E4
+          { freq: 293.66, dur: 0.45, gap: 0.50 }, // D4
+          { freq: 261.63, dur: 1.20, gap: 1.30 }, // C4
+        ];
+        break;
+    }
 
     let startOffset = ctx.currentTime + 0.05;
     notes.forEach((n) => {
@@ -172,7 +244,7 @@ class ReminderAudioEngine {
 
     const timeout = window.setTimeout(() => {
       if (this.isLooping && this.isPlaying) {
-        this.playDefaultReminderSong(true);
+        this.playTune(tuneId, true);
       } else {
         this.isPlaying = false;
         this.notify();
@@ -180,6 +252,19 @@ class ReminderAudioEngine {
     }, totalDurationMs);
 
     this.timeouts.push(timeout);
+  }
+
+  /**
+   * Preview a short 2.5s snippet of any song
+   */
+  public previewTune(tuneId: string): void {
+    this.playTune(tuneId, false);
+    const stopTimeout = window.setTimeout(() => {
+      if (!this.isLooping) {
+        this.stop();
+      }
+    }, 3800);
+    this.timeouts.push(stopTimeout);
   }
 
   /**

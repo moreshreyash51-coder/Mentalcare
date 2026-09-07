@@ -1,4 +1,17 @@
-import { GameProgress, GameResult, Memory, Reminder, User, ChatMessage, AppNotification, DatabaseStatus, CognitivePerformanceReport } from '../types';
+import {
+  GameProgress,
+  GameResult,
+  Memory,
+  Reminder,
+  User,
+  ChatMessage,
+  AppNotification,
+  DatabaseStatus,
+  CognitivePerformanceReport,
+  ImageAnalysisResult,
+  AudioAnalysisResult,
+  TextAnalysisResult,
+} from '../types';
 
 const BASE_URL = '/api';
 
@@ -228,5 +241,67 @@ export const api = {
       method: 'PUT',
       headers: getAuthHeaders(),
     });
+  },
+
+  // User Profile
+  async updateProfile(updates: Partial<User>): Promise<{ user: User }> {
+    const res = await fetch(`${BASE_URL}/auth/profile`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('Failed to update profile');
+    return res.json();
+  },
+
+  // Specialized Multimodal AI Analyzers
+  async analyzeImage(
+    patientId: string,
+    imageBase64: string,
+    options?: { mimeType?: string; mode?: string; customQuestion?: string }
+  ): Promise<ImageAnalysisResult> {
+    const res = await fetch(`${BASE_URL}/ai/analyze-image`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        patientId,
+        imageBase64,
+        mimeType: options?.mimeType || 'image/jpeg',
+        mode: options?.mode || 'general',
+        customQuestion: options?.customQuestion,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to perform image analysis');
+    return res.json();
+  },
+
+  async analyzeAudio(
+    patientId: string,
+    payload: { audioBase64?: string; mimeType?: string; transcript?: string; language?: string }
+  ): Promise<AudioAnalysisResult> {
+    const res = await fetch(`${BASE_URL}/ai/analyze-audio`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        patientId,
+        ...payload,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to perform audio voice analysis');
+    return res.json();
+  },
+
+  async analyzeText(patientId: string, text: string, language?: string): Promise<TextAnalysisResult> {
+    const res = await fetch(`${BASE_URL}/ai/analyze-text`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        patientId,
+        text,
+        language,
+      }),
+    });
+    if (!res.ok) throw new Error('Failed to perform text analysis');
+    return res.json();
   },
 };

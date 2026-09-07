@@ -32,7 +32,7 @@ patientsRouter.get('/:id', async (req: Request, res: Response): Promise<void> =>
 // PUT /api/patients/:id
 patientsRouter.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, emergencyContact, accessibilitySettings, language, cognitiveDifficulty } = req.body;
+    const { name, gender, avatar, emergencyContact, accessibilitySettings, language, cognitiveDifficulty } = req.body;
     const existing = await db.users.findById(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Patient not found' });
@@ -41,6 +41,8 @@ patientsRouter.put('/:id', async (req: Request, res: Response): Promise<void> =>
 
     const updated = await db.users.findByIdAndUpdate(req.params.id, {
       ...(name ? { name } : {}),
+      ...(gender ? { gender } : {}),
+      ...(avatar ? { avatar } : {}),
       ...(emergencyContact ? { emergencyContact } : {}),
       ...(accessibilitySettings ? { accessibilitySettings } : {}),
       ...(language ? { language } : {}),

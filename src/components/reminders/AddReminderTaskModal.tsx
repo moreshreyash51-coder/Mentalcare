@@ -18,7 +18,7 @@ import {
   Check,
   AlertCircle,
 } from 'lucide-react';
-import { Reminder } from '../../types';
+import { Reminder, REMINDER_TUNES } from '../../types';
 import { reminderAudio } from '../../utils/reminderAudio';
 import { useAccessibility } from '../../context/AccessibilityContext';
 
@@ -98,6 +98,7 @@ export const AddReminderTaskModal: React.FC<AddReminderTaskModalProps> = ({
   const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
   const [notes, setNotes] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundTune, setSoundTune] = useState<string>('morning-bells');
 
   const [isSongPreviewing, setIsSongPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,12 +125,13 @@ export const AddReminderTaskModal: React.FC<AddReminderTaskModalProps> = ({
     speakText(`Applied preset: ${p.title}`);
   };
 
-  const handleTogglePreviewSong = () => {
+  const handleTogglePreviewSong = (tuneId = soundTune) => {
     if (isSongPreviewing) {
       reminderAudio.stop();
     } else {
-      reminderAudio.playDefaultReminderSong(false);
-      speakText('Previewing the calming default reminder melody.');
+      reminderAudio.previewTune(tuneId);
+      const chosen = REMINDER_TUNES.find((t) => t.id === tuneId);
+      speakText(`Previewing ${chosen?.name || 'reminder melody'}.`);
     }
   };
 
@@ -156,7 +158,7 @@ export const AddReminderTaskModal: React.FC<AddReminderTaskModalProps> = ({
         description: notes,
         completed: false,
         soundEnabled,
-        soundTune: 'soothing-song',
+        soundTune,
       });
       reminderAudio.playGentleChime();
       speakText(`Successfully added ${cleanTitle} to your schedule.`);
@@ -358,7 +360,7 @@ export const AddReminderTaskModal: React.FC<AddReminderTaskModalProps> = ({
             </div>
           </div>
 
-          {/* 5. Melodic Default Song Reminder Feature */}
+          {/* 5. Melodic Song Reminder Feature */}
           <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-2xl p-4 sm:p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -367,7 +369,7 @@ export const AddReminderTaskModal: React.FC<AddReminderTaskModalProps> = ({
                 </div>
                 <div>
                   <h4 className="font-extrabold text-sm sm:text-base text-slate-900">
-                    Remind with Default Calming Song
+                    Remind with Calming Song
                   </h4>
                   <p className="text-xs text-slate-600">
                     Plays a gentle, peaceful bell melody when this task is due.
@@ -386,32 +388,54 @@ export const AddReminderTaskModal: React.FC<AddReminderTaskModalProps> = ({
               </label>
             </div>
 
-            {/* Preview Button */}
-            <div className="flex items-center justify-between pt-2 border-t border-amber-200/60">
-              <button
-                type="button"
-                onClick={handleTogglePreviewSong}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black transition-all cursor-pointer shadow-2xs"
-              >
-                {isSongPreviewing ? (
-                  <>
-                    <VolumeX className="w-4 h-4 text-amber-700 animate-pulse" />
-                    <span>Stop Song Preview</span>
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="w-4 h-4 text-amber-700" />
-                    <span>Preview Default Song 🎵</span>
-                  </>
-                )}
-              </button>
+            {soundEnabled && (
+              <div className="pt-2 border-t border-amber-200/60 space-y-2">
+                <label className="block text-xs font-black uppercase tracking-wider text-amber-900">
+                  Select Melody / Song:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {REMINDER_TUNES.map((tune) => {
+                    const isSelected = soundTune === tune.id;
+                    return (
+                      <div
+                        key={tune.id}
+                        onClick={() => setSoundTune(tune.id)}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-white border-amber-500 shadow-xs ring-2 ring-amber-400'
+                            : 'bg-white/60 hover:bg-white border-amber-200 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-lg">{tune.icon}</span>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-900 block truncate">
+                              {tune.name}
+                            </span>
+                            <span className="text-[11px] text-slate-500 block truncate">
+                              {tune.description}
+                            </span>
+                          </div>
+                        </div>
 
-              {isSongPreviewing && (
-                <span className="text-xs font-bold text-amber-800 animate-pulse">
-                  ♪ Playing melodic chime...
-                </span>
-              )}
-            </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTogglePreviewSong(tune.id);
+                          }}
+                          className="p-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 shrink-0 transition-colors"
+                          title={`Preview ${tune.name}`}
+                          aria-label={`Preview ${tune.name}`}
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 6. Notes / Description */}

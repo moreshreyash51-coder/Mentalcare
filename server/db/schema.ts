@@ -9,6 +9,7 @@ export interface IUser {
   email: string;
   password: string; // hashed
   role: 'patient' | 'caregiver';
+  gender?: 'male' | 'female' | 'other';
   patientId?: string; // If caregiver, who they care for; if patient, their own id
   avatar?: string;
   dateOfBirth?: string;
@@ -17,7 +18,22 @@ export interface IUser {
     phone: string;
     relation: string;
   };
-  language: 'en' | 'es' | 'fr' | 'de';
+  language:
+    | 'en'
+    | 'as'
+    | 'bn'
+    | 'mni'
+    | 'brx'
+    | 'lus'
+    | 'kha'
+    | 'grt'
+    | 'ne'
+    | 'ao'
+    | 'trp'
+    | 'hi'
+    | 'es'
+    | 'fr'
+    | 'de';
   accessibilitySettings: {
     fontSize: 'normal' | 'large' | 'extra-large';
     highContrast: boolean;
@@ -108,6 +124,7 @@ const UserMongooseSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
     role: { type: String, enum: ['patient', 'caregiver'], default: 'patient' },
+    gender: { type: String, enum: ['male', 'female', 'other'], default: 'female' },
     patientId: { type: String },
     avatar: { type: String },
     dateOfBirth: { type: String },
@@ -116,7 +133,11 @@ const UserMongooseSchema = new Schema<IUser>(
       phone: { type: String },
       relation: { type: String },
     },
-    language: { type: String, enum: ['en', 'es', 'fr', 'de'], default: 'en' },
+    language: {
+      type: String,
+      enum: ['en', 'as', 'bn', 'mni', 'brx', 'lus', 'kha', 'grt', 'ne', 'ao', 'trp', 'hi', 'es', 'fr', 'de'],
+      default: 'en',
+    },
     accessibilitySettings: {
       fontSize: { type: String, enum: ['normal', 'large', 'extra-large'], default: 'large' },
       highContrast: { type: Boolean, default: false },
@@ -241,8 +262,9 @@ const initialUsers: IUser[] = [
     email: 'eleanor@example.com',
     password: defaultPasswordHash,
     role: 'patient',
+    gender: 'female',
     patientId: 'patient_eleanor',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80',
     dateOfBirth: '1952-04-12',
     emergencyContact: {
       name: 'Sarah Vance',
@@ -262,13 +284,41 @@ const initialUsers: IUser[] = [
     updatedAt: new Date().toISOString(),
   },
   {
+    _id: 'patient_arthur',
+    name: 'Arthur Vance',
+    email: 'arthur@example.com',
+    password: defaultPasswordHash,
+    role: 'patient',
+    gender: 'male',
+    patientId: 'patient_arthur',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80',
+    dateOfBirth: '1949-08-20',
+    emergencyContact: {
+      name: 'David Vance',
+      phone: '(555) 876-5432',
+      relation: 'Son',
+    },
+    language: 'en',
+    accessibilitySettings: {
+      fontSize: 'large',
+      highContrast: false,
+      voiceAssistance: true,
+      speechRate: 0.9,
+      simpleNavigation: true,
+    },
+    cognitiveDifficulty: 'easy',
+    createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
     _id: 'caregiver_sarah',
     name: 'Sarah Vance',
     email: 'sarah@example.com',
     password: defaultPasswordHash,
     role: 'caregiver',
+    gender: 'female',
     patientId: 'patient_eleanor',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&auto=format&fit=crop&q=80',
     emergencyContact: {
       name: 'Dr. Robert Miller',
       phone: '(555) 987-6543',
@@ -284,6 +334,32 @@ const initialUsers: IUser[] = [
     },
     cognitiveDifficulty: 'medium',
     createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    _id: 'caregiver_david',
+    name: 'David Vance',
+    email: 'david@example.com',
+    password: defaultPasswordHash,
+    role: 'caregiver',
+    gender: 'male',
+    patientId: 'patient_arthur',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
+    emergencyContact: {
+      name: 'Dr. Evelyn Clark',
+      phone: '(555) 345-6789',
+      relation: 'Geriatric Specialist',
+    },
+    language: 'en',
+    accessibilitySettings: {
+      fontSize: 'normal',
+      highContrast: false,
+      voiceAssistance: false,
+      speechRate: 1.0,
+      simpleNavigation: false,
+    },
+    cognitiveDifficulty: 'medium',
+    createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
     updatedAt: new Date().toISOString(),
   },
 ];
@@ -341,6 +417,32 @@ const initialMemories: IMemory[] = [
     createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
     updatedAt: new Date().toISOString(),
   },
+  {
+    _id: 'mem_arthur_1',
+    patientId: 'patient_arthur',
+    title: 'My Caring Son, David',
+    personName: 'David Vance',
+    relationship: 'Son & Primary Caregiver',
+    description: 'David always drops by with a warm smile, helps in the workshop, and shares wonderful stories over black tea.',
+    photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80',
+    tags: ['Family', 'Son', 'Support'],
+    dateEra: 'Present',
+    createdAt: new Date(Date.now() - 12 * 86400000).toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    _id: 'mem_arthur_2',
+    patientId: 'patient_arthur',
+    title: 'Woodworking Workshop & Clocks',
+    personName: 'Handcrafted Clocks',
+    relationship: 'Lifelong Hobby',
+    description: 'Building grandfather clocks with cedar wood and brass chimes. The steady tick-tock was music to the ears.',
+    photoUrl: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80',
+    tags: ['Woodwork', 'Craft', 'Memories'],
+    dateEra: '1980s - 2000s',
+    createdAt: new Date(Date.now() - 8 * 86400000).toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
 ];
 
 const initialReminders: IReminder[] = [
@@ -352,6 +454,8 @@ const initialReminders: IReminder[] = [
     category: 'medication',
     completed: true,
     recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'morning-bells',
     notes: 'Take with a glass of water after toast.',
     createdAt: new Date().toISOString(),
   },
@@ -363,6 +467,8 @@ const initialReminders: IReminder[] = [
     category: 'hydration',
     completed: true,
     recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'sunshine-tune',
     notes: 'Keep the cozy blue mug filled.',
     createdAt: new Date().toISOString(),
   },
@@ -374,6 +480,8 @@ const initialReminders: IReminder[] = [
     category: 'meal',
     completed: false,
     recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'calm-forest',
     notes: 'Warm tomato vegetable soup in the pantry.',
     createdAt: new Date().toISOString(),
   },
@@ -385,6 +493,8 @@ const initialReminders: IReminder[] = [
     category: 'activity',
     completed: false,
     recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'temple-chimes',
     notes: 'Smell the fresh lavender and check on the roses.',
     createdAt: new Date().toISOString(),
   },
@@ -396,7 +506,48 @@ const initialReminders: IReminder[] = [
     category: 'medication',
     completed: false,
     recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'gentle-harmony',
     notes: 'With warm chamomile tea.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    _id: 'rem_arthur_1',
+    patientId: 'patient_arthur',
+    title: 'Morning Heart & Blood Pressure Tablet',
+    time: '08:30',
+    category: 'medication',
+    completed: true,
+    recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'morning-bells',
+    notes: 'Take with half glass of lukewarm water.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    _id: 'rem_arthur_2',
+    patientId: 'patient_arthur',
+    title: 'Hydration - Fresh Water Cup',
+    time: '11:00',
+    category: 'hydration',
+    completed: false,
+    recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'sunshine-tune',
+    notes: 'Drink a full glass from the kitchen pitcher.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    _id: 'rem_arthur_3',
+    patientId: 'patient_arthur',
+    title: 'Afternoon Brain Stimulation Game',
+    time: '15:30',
+    category: 'activity',
+    completed: false,
+    recurrence: 'Daily',
+    soundEnabled: true,
+    soundTune: 'calm-forest',
+    notes: 'Play 5 minutes of Picture Recall.',
     createdAt: new Date().toISOString(),
   },
 ];

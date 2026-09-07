@@ -337,7 +337,7 @@ export const CaregiverDashboard: React.FC = () => {
                     className="text-[11px] text-teal-300 hover:text-teal-200 font-bold flex items-center gap-1 mt-0.5 cursor-pointer"
                   >
                     <Edit2 className="w-3 h-3" />
-                    <span>Edit Photo & Gender</span>
+                    <span>Change Gender Profile</span>
                   </button>
                 </div>
               </div>

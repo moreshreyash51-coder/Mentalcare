@@ -24,7 +24,6 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
 import {
-  AVATAR_PRESETS,
   DEFAULT_FEMALE_PATIENT_AVATAR,
   DEFAULT_MALE_PATIENT_AVATAR,
   DEFAULT_FEMALE_CAREGIVER_AVATAR,
@@ -597,47 +596,29 @@ export const AuthLandingView: React.FC = () => {
                 </button>
               </div>
 
-              {/* Photo Avatars Preview & Choice */}
-              <div>
-                <span className="text-xs font-bold text-slate-600 block mb-2">
-                  Choose Photo Portrait:
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {AVATAR_PRESETS.filter((p) => p.gender === regGender).map((preset) => {
-                    const isSelected = regAvatar === preset.url;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => {
-                          setRegAvatar(preset.url);
-                          speakText(`Selected photo: ${preset.name}`);
-                        }}
-                        className={`p-2 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 cursor-pointer ${
-                          isSelected
-                            ? 'bg-white border-teal-600 shadow-md ring-2 ring-teal-400'
-                            : 'bg-white/70 border-slate-200 hover:bg-white hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="relative">
-                          <img
-                            src={preset.url}
-                            alt={preset.name}
-                            referrerPolicy="no-referrer"
-                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-xs"
-                          />
-                          {isSelected && (
-                            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center shadow-xs">
-                              <Check className="w-3 h-3" />
-                            </div>
-                          )}
-                        </div>
-                        <span className="text-[11px] font-bold text-slate-800 line-clamp-1">
-                          {preset.name.split('(')[0].trim()}
-                        </span>
-                      </button>
-                    );
-                  })}
+              {/* Assigned Default Profile Preview */}
+              <div className="flex items-center gap-3.5 p-3.5 bg-slate-50 border border-slate-200/90 rounded-2xl">
+                <img
+                  src={
+                    regRole === 'caregiver'
+                      ? regGender === 'female'
+                        ? DEFAULT_FEMALE_CAREGIVER_AVATAR
+                        : DEFAULT_MALE_CAREGIVER_AVATAR
+                      : regGender === 'female'
+                        ? DEFAULT_FEMALE_PATIENT_AVATAR
+                        : DEFAULT_MALE_PATIENT_AVATAR
+                  }
+                  alt={regGender === 'female' ? 'Female Profile' : 'Male Profile'}
+                  referrerPolicy="no-referrer"
+                  className="w-14 h-14 rounded-2xl object-cover ring-2 ring-teal-600/30 shadow-xs flex-shrink-0"
+                />
+                <div>
+                  <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                    <span>{regGender === 'female' ? '👩 Default Female Profile' : '👨 Default Male Profile'}</span>
+                  </span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Profile picture assigned automatically according to your selected gender.
+                  </p>
                 </div>
               </div>
             </div>

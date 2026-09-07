@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { DatabaseStatus, AVATAR_PRESETS, DEFAULT_FEMALE_PATIENT_AVATAR, DEFAULT_MALE_PATIENT_AVATAR, DEFAULT_FEMALE_CAREGIVER_AVATAR, DEFAULT_MALE_CAREGIVER_AVATAR } from '../../types';
+import { DatabaseStatus, DEFAULT_FEMALE_PATIENT_AVATAR, DEFAULT_MALE_PATIENT_AVATAR, DEFAULT_FEMALE_CAREGIVER_AVATAR, DEFAULT_MALE_CAREGIVER_AVATAR } from '../../types';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -250,7 +250,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   )}
                 </div>
 
-                {/* Gender toggle buttons */}
+                {/* Gender profile toggle buttons */}
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -260,13 +260,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                       const defaultAvatar = user?.role === 'caregiver' ? DEFAULT_FEMALE_CAREGIVER_AVATAR : DEFAULT_FEMALE_PATIENT_AVATAR;
                       handleSaveAvatarGender(newGender, defaultAvatar);
                     }}
-                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                       selectedGender === 'female'
                         ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-200'
                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    <span>👩 Female Photo</span>
+                    <span>👩 Female Profile</span>
                     {selectedGender === 'female' && <CheckCircle2 className="w-3.5 h-3.5 text-rose-600" />}
                   </button>
 
@@ -278,46 +278,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                       const defaultAvatar = user?.role === 'caregiver' ? DEFAULT_MALE_CAREGIVER_AVATAR : DEFAULT_MALE_PATIENT_AVATAR;
                       handleSaveAvatarGender(newGender, defaultAvatar);
                     }}
-                    className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                       selectedGender === 'male'
                         ? 'bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-200'
                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                     }`}
                   >
-                    <span>👨 Male Photo</span>
+                    <span>👨 Male Profile</span>
                     {selectedGender === 'male' && <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />}
                   </button>
                 </div>
 
-                {/* Photo choices for selected gender */}
-                <div className="grid grid-cols-4 gap-2 pt-1">
-                  {AVATAR_PRESETS.filter((p) => p.gender === selectedGender).map((preset) => {
-                    const isSelected = selectedAvatar === preset.url || user?.avatar === preset.url;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        disabled={isUpdatingAvatar}
-                        onClick={() => handleSaveAvatarGender(selectedGender, preset.url)}
-                        className={`p-1.5 rounded-xl border-2 transition-all flex flex-col items-center gap-1 cursor-pointer ${
-                          isSelected
-                            ? 'bg-teal-50 border-teal-600 ring-1 ring-teal-500 shadow-2xs'
-                            : 'bg-slate-50 border-slate-200 hover:bg-white'
-                        }`}
-                        title={preset.name}
-                      >
-                        <img
-                          src={preset.url}
-                          alt={preset.name}
-                          className="w-10 h-10 rounded-lg object-cover"
-                        />
-                        <span className="text-[10px] font-bold text-slate-700 truncate w-full text-center">
-                          {preset.name.split('(')[0].trim()}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <p className="text-[11px] text-slate-500 text-center pt-1">
+                  Default profile photo is automatically assigned according to your selected gender.
+                </p>
               </div>
             </div>
           ) : (

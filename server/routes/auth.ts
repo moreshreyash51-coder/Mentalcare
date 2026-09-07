@@ -288,7 +288,19 @@ authRouter.put('/profile', async (req: Request, res: Response): Promise<void> =>
     };
 
     if (name) updates.name = name;
-    if (gender) updates.gender = gender;
+    if (gender) {
+      updates.gender = gender;
+      if (!avatar) {
+        updates.avatar =
+          existing.role === 'caregiver'
+            ? gender === 'male'
+              ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
+              : 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&auto=format&fit=crop&q=80'
+            : gender === 'male'
+              ? 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80'
+              : 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80';
+      }
+    }
     if (avatar) updates.avatar = avatar;
     if (dateOfBirth) updates.dateOfBirth = dateOfBirth;
     if (emergencyContact) updates.emergencyContact = emergencyContact;

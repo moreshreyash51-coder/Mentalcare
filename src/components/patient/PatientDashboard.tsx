@@ -22,6 +22,8 @@ import {
   Square,
   Droplets,
   Pill,
+  MapPin,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAccessibility } from '../../context/AccessibilityContext';
@@ -77,6 +79,36 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
     };
     loadData();
   }, [user]);
+
+  // Sync patient's live location with caregiver safe zone tracking
+  useEffect(() => {
+    const pId = user?._id || 'patient_eleanor';
+    const reportCurrentLocation = () => {
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              await api.updatePatientLocation(pId, {
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+                accuracy: Math.round(pos.coords.accuracy),
+              });
+            } catch (err) {
+              console.warn('Silent location report error:', err);
+            }
+          },
+          (err) => {
+            console.warn('Geolocation permission or error:', err.message);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        );
+      }
+    };
+
+    reportCurrentLocation();
+    const interval = setInterval(reportCurrentLocation, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user?._id]);
 
   // Subscribe to audio engine changes
   useEffect(() => {
@@ -209,10 +241,31 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
               <Volume2 className="w-5 h-5" />
             </div>
             <div className="text-left">
-              <span className="block text-xs uppercase tracking-wider text-teal-700 font-extrabold">Audio Help</span>
+              <span className="block text-xs uppercase tracking-wider text-teal-700 font-extrabold">{t('audioHelp')}</span>
               <span className="block text-sm font-bold leading-tight">{t('readAloud')}</span>
             </div>
           </button>
+        </div>
+
+        {/* Reassuring Caregiver Location Tracking Status */}
+        <div
+          id="patient-location-safety-badge"
+          className="mt-6 pt-4 border-t border-teal-600/50 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-teal-100 relative z-10"
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 animate-pulse shrink-0" />
+            <span className="font-bold text-white flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-300 shrink-0" />
+              {t('patientProtectedByTracking')}
+            </span>
+            <span className="text-teal-200 hidden md:inline">
+              — {t('locationSharedWithCaregiver')}
+            </span>
+          </div>
+          <span className="bg-teal-900/50 border border-teal-400/40 px-3 py-1 rounded-full font-bold text-teal-200 text-xs flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-emerald-300" />
+            {t('safeAtHome')}
+          </span>
         </div>
       </section>
 
@@ -592,7 +645,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
           </div>
           <div>
             <h4 className="font-extrabold text-base sm:text-lg text-slate-900">
-              Primary Loved One Contact
+              {t('familyEmergency')}
             </h4>
             <p className="text-slate-600 text-sm">
               {user?.emergencyContact?.name || 'Sarah Vance'} ({user?.emergencyContact?.relation || 'Daughter'}):{' '}
@@ -613,7 +666,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
           className="inline-flex items-center gap-2 bg-white hover:bg-teal-100 text-teal-900 px-4 py-2.5 rounded-xl font-bold border border-teal-300 text-sm transition-colors cursor-pointer"
         >
           <Volume2 className="w-4 h-4 text-teal-700" />
-          <span>Speak Phone Info</span>
+          <span>{t('audioHelp')}</span>
         </button>
       </section>
 
@@ -630,7 +683,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
           />
           <div>
             <p className="text-sm font-extrabold text-slate-800">
-              Active Patient: <span className="text-teal-700">{user?.name || 'Eleanor Vance'}</span>
+              {t('activePatient')}: <span className="text-teal-700">{user?.name || 'Eleanor Vance'}</span>
             </p>
             <p className="text-xs text-slate-500">
               Your memory games, photo albums, and reminders are actively synced to MongoDB.
@@ -649,7 +702,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold border border-slate-200 cursor-pointer transition-colors"
           >
             <Volume2 className="w-4 h-4 text-teal-700" />
-            <span>Audio Status</span>
+            <span>{t('audioHelp')}</span>
           </button>
           <button
             id="dashboard-signout-btn"
@@ -657,7 +710,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigate }
             className="inline-flex items-center gap-1.5 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-900 px-4 py-2 rounded-xl font-extrabold border border-rose-200 text-xs sm:text-sm shadow-2xs transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4 text-rose-600" />
-            <span>Sign Out</span>
+            <span>{t('signOut')}</span>
           </button>
         </div>
       </section>

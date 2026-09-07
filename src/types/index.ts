@@ -25,6 +25,30 @@ export type LanguageOption =
   | 'fr'  // French (Français)
   | 'de'; // German (Deutsch)
 
+export interface PatientLocation {
+  latitude: number;
+  longitude: number;
+  address: string;
+  accuracy: number; // in meters
+  batteryLevel?: number; // 0 to 100
+  status: 'at_home' | 'safe_zone' | 'away' | 'wandering_alert';
+  lastUpdated: string;
+  homeLatitude: number;
+  homeLongitude: number;
+  homeAddress: string;
+  safeZoneRadiusMeters: number;
+}
+
+export interface LocationBreadcrumb {
+  _id: string;
+  patientId: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+  status: 'at_home' | 'safe_zone' | 'away' | 'wandering_alert';
+  timestamp: string;
+}
+
 export interface User {
   _id: string;
   name: string;
@@ -42,6 +66,8 @@ export interface User {
   language: LanguageOption;
   accessibilitySettings: UserAccessibilitySettings;
   cognitiveDifficulty: 'easy' | 'medium' | 'hard';
+  location?: PatientLocation;
+  locationHistory?: LocationBreadcrumb[];
   createdAt: string;
   updatedAt?: string;
 }

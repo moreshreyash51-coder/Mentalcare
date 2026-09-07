@@ -3,6 +3,30 @@ import mongoose, { Schema, Model } from 'mongoose';
 
 // MongoDB / Mongoose compatible interfaces and schema definitions
 
+export interface IPatientLocation {
+  latitude: number;
+  longitude: number;
+  address: string;
+  accuracy: number; // in meters
+  batteryLevel?: number; // 0 to 100
+  status: 'at_home' | 'safe_zone' | 'away' | 'wandering_alert';
+  lastUpdated: string;
+  homeLatitude: number;
+  homeLongitude: number;
+  homeAddress: string;
+  safeZoneRadiusMeters: number;
+}
+
+export interface ILocationBreadcrumb {
+  _id: string;
+  patientId: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+  status: 'at_home' | 'safe_zone' | 'away' | 'wandering_alert';
+  timestamp: string;
+}
+
 export interface IUser {
   _id: string;
   name: string;
@@ -42,6 +66,8 @@ export interface IUser {
     simpleNavigation: boolean;
   };
   cognitiveDifficulty: 'easy' | 'medium' | 'hard';
+  location?: IPatientLocation;
+  locationHistory?: ILocationBreadcrumb[];
   createdAt: string;
   updatedAt: string;
 }
@@ -108,7 +134,7 @@ export interface INotification {
   caregiverId?: string;
   title: string;
   message: string;
-  type: 'game_completed' | 'reminder_due' | 'difficulty_adapted' | 'note';
+  type: 'game_completed' | 'reminder_due' | 'difficulty_adapted' | 'note' | 'location_alert' | 'wandering_alert';
   read: boolean;
   createdAt: string;
 }
@@ -146,6 +172,30 @@ const UserMongooseSchema = new Schema<IUser>(
       simpleNavigation: { type: Boolean, default: true },
     },
     cognitiveDifficulty: { type: String, enum: ['easy', 'medium', 'hard'], default: 'easy' },
+    location: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      address: { type: String },
+      accuracy: { type: Number },
+      batteryLevel: { type: Number },
+      status: { type: String, enum: ['at_home', 'safe_zone', 'away', 'wandering_alert'], default: 'at_home' },
+      lastUpdated: { type: String },
+      homeLatitude: { type: Number },
+      homeLongitude: { type: Number },
+      homeAddress: { type: String },
+      safeZoneRadiusMeters: { type: Number, default: 250 },
+    },
+    locationHistory: [
+      {
+        _id: { type: String },
+        patientId: { type: String },
+        latitude: { type: Number },
+        longitude: { type: Number },
+        address: { type: String },
+        status: { type: String },
+        timestamp: { type: String },
+      },
+    ],
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String, default: () => new Date().toISOString() },
   },
@@ -237,7 +287,7 @@ const NotificationMongooseSchema = new Schema<INotification>(
     caregiverId: { type: String },
     title: { type: String, required: true },
     message: { type: String, required: true },
-    type: { type: String, enum: ['game_completed', 'reminder_due', 'difficulty_adapted', 'note'], default: 'note' },
+    type: { type: String, enum: ['game_completed', 'reminder_due', 'difficulty_adapted', 'note', 'location_alert', 'wandering_alert'], default: 'note' },
     read: { type: Boolean, default: false },
     createdAt: { type: String, default: () => new Date().toISOString() },
   },
@@ -280,6 +330,48 @@ const initialUsers: IUser[] = [
       simpleNavigation: true,
     },
     cognitiveDifficulty: 'easy',
+    location: {
+      latitude: 40.7306,
+      longitude: -74.2691,
+      address: '42 Meadowbrook Lane, Maplewood, NJ 07040',
+      accuracy: 6,
+      batteryLevel: 86,
+      status: 'at_home',
+      lastUpdated: new Date(Date.now() - 3 * 60000).toISOString(),
+      homeLatitude: 40.7306,
+      homeLongitude: -74.2691,
+      homeAddress: '42 Meadowbrook Lane, Maplewood, NJ 07040',
+      safeZoneRadiusMeters: 250,
+    },
+    locationHistory: [
+      {
+        _id: 'loc_e1',
+        patientId: 'patient_eleanor',
+        latitude: 40.7306,
+        longitude: -74.2691,
+        address: 'Living Room, 42 Meadowbrook Lane, Maplewood, NJ',
+        status: 'at_home',
+        timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
+      },
+      {
+        _id: 'loc_e2',
+        patientId: 'patient_eleanor',
+        latitude: 40.7308,
+        longitude: -74.2689,
+        address: 'Garden Walkway (Safe Zone), Maplewood, NJ',
+        status: 'safe_zone',
+        timestamp: new Date(Date.now() - 25 * 60000).toISOString(),
+      },
+      {
+        _id: 'loc_e3',
+        patientId: 'patient_eleanor',
+        latitude: 40.7305,
+        longitude: -74.2692,
+        address: 'Front Porch, 42 Meadowbrook Lane, Maplewood, NJ',
+        status: 'at_home',
+        timestamp: new Date(Date.now() - 75 * 60000).toISOString(),
+      },
+    ],
     createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -307,6 +399,39 @@ const initialUsers: IUser[] = [
       simpleNavigation: true,
     },
     cognitiveDifficulty: 'easy',
+    location: {
+      latitude: 42.5878,
+      longitude: -72.6001,
+      address: '15 Oak Ridge Road, Greenfield, MA 01301',
+      accuracy: 8,
+      batteryLevel: 92,
+      status: 'at_home',
+      lastUpdated: new Date(Date.now() - 4 * 60000).toISOString(),
+      homeLatitude: 42.5878,
+      homeLongitude: -72.6001,
+      homeAddress: '15 Oak Ridge Road, Greenfield, MA 01301',
+      safeZoneRadiusMeters: 250,
+    },
+    locationHistory: [
+      {
+        _id: 'loc_a1',
+        patientId: 'patient_arthur',
+        latitude: 42.5878,
+        longitude: -72.6001,
+        address: 'Workshop, 15 Oak Ridge Road, Greenfield, MA',
+        status: 'at_home',
+        timestamp: new Date(Date.now() - 10 * 60000).toISOString(),
+      },
+      {
+        _id: 'loc_a2',
+        patientId: 'patient_arthur',
+        latitude: 42.5879,
+        longitude: -72.5999,
+        address: 'Backyard Arbor, Greenfield, MA',
+        status: 'safe_zone',
+        timestamp: new Date(Date.now() - 40 * 60000).toISOString(),
+      },
+    ],
     createdAt: new Date(Date.now() - 25 * 86400000).toISOString(),
     updatedAt: new Date().toISOString(),
   },

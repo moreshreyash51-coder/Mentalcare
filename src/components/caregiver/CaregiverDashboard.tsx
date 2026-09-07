@@ -28,6 +28,7 @@ import {
   Play,
   Square,
   FileText,
+  MapPin,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -62,12 +63,13 @@ import { SignOutConfirmModal } from '../auth/SignOutConfirmModal';
 import { AuthModal } from '../common/AuthModal';
 import { reminderAudio } from '../../utils/reminderAudio';
 import { PatientPerformanceAnalysis } from './PatientPerformanceAnalysis';
+import { PatientLocationTracking } from './PatientLocationTracking';
 
 export const CaregiverDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const { t } = useAccessibility();
 
-  const [activeTab, setActiveTab] = useState<'clinical-report' | 'analytics' | 'memories' | 'reminders' | 'ai-insights'>('clinical-report');
+  const [activeTab, setActiveTab] = useState<'clinical-report' | 'location' | 'analytics' | 'memories' | 'reminders' | 'ai-insights'>('clinical-report');
   const [allPatients, setAllPatients] = useState<User[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(() => user?.patientId || 'patient_eleanor');
   const [patient, setPatient] = useState<User | null>(null);
@@ -490,6 +492,29 @@ export const CaregiverDashboard: React.FC = () => {
           </span>
         </button>
 
+        {/* Tab: Patient Location & Safe Zone */}
+        <button
+          id="tab-location"
+          onClick={() => setActiveTab('location')}
+          className={`pb-3 text-sm sm:text-base font-black flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap cursor-pointer ${
+            activeTab === 'location'
+              ? 'border-indigo-600 text-indigo-950'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <MapPin className="w-5 h-5 text-rose-600" />
+          <span>{t('patientLocation')}</span>
+          <span
+            className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full hidden sm:inline ${
+              patient?.location?.status === 'wandering_alert'
+                ? 'bg-rose-100 text-rose-800 animate-pulse'
+                : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            {patient?.location?.status === 'wandering_alert' ? 'Alert' : 'Live Safe'}
+          </span>
+        </button>
+
         {/* Tab 2: Analytics & Trends */}
         <button
           id="tab-analytics"
@@ -557,6 +582,14 @@ export const CaregiverDashboard: React.FC = () => {
           report={report}
           onRefreshReport={() => loadReportData(pId)}
           isLoadingReport={isLoadingReport}
+        />
+      )}
+
+      {/* TAB: PATIENT LOCATION & SAFE ZONE TRACKING */}
+      {activeTab === 'location' && (
+        <PatientLocationTracking
+          patient={patient}
+          onRefreshPatient={loadAllData}
         />
       )}
 

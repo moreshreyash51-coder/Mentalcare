@@ -11,6 +11,8 @@ import {
   ImageAnalysisResult,
   AudioAnalysisResult,
   TextAnalysisResult,
+  PatientLocation,
+  LocationBreadcrumb,
 } from '../types';
 
 const BASE_URL = '/api';
@@ -79,6 +81,66 @@ export const api = {
       body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error('Failed to update patient');
+    return res.json();
+  },
+
+  // Patient Location & Safe Zone Tracking
+  async getPatientLocation(patientId: string): Promise<{
+    patientId: string;
+    patientName: string;
+    emergencyContact?: { name: string; phone: string; relation: string };
+    location: PatientLocation;
+    locationHistory: LocationBreadcrumb[];
+  }> {
+    const res = await fetch(`${BASE_URL}/patients/${patientId}/location`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch patient location');
+    return res.json();
+  },
+
+  async updatePatientLocation(
+    patientId: string,
+    data: { latitude: number; longitude: number; address?: string; accuracy?: number; batteryLevel?: number }
+  ): Promise<{
+    message: string;
+    location: PatientLocation;
+    locationHistory: LocationBreadcrumb[];
+    distanceFromHomeMeters: number;
+  }> {
+    const res = await fetch(`${BASE_URL}/patients/${patientId}/location`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update patient location');
+    return res.json();
+  },
+
+  async updateGeofence(
+    patientId: string,
+    data: { safeZoneRadiusMeters: number; homeLatitude?: number; homeLongitude?: number; homeAddress?: string }
+  ): Promise<{
+    message: string;
+    location: PatientLocation;
+  }> {
+    const res = await fetch(`${BASE_URL}/patients/${patientId}/location/geofence`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update safe zone geofence');
+    return res.json();
+  },
+
+  async pingPatientLocation(patientId: string): Promise<{
+    message: string;
+    location: PatientLocation;
+    locationHistory: LocationBreadcrumb[];
+  }> {
+    const res = await fetch(`${BASE_URL}/patients/${patientId}/location/ping`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to ping patient device');
     return res.json();
   },
 
